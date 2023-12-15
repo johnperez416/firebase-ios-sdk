@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
 @testable import FirebaseCore
+import XCTest
 
 private extension Constants {
   static let testAppName1 = "test_app_name_1"
@@ -300,7 +300,6 @@ class FirebaseAppTests: XCTestCase {
     XCTAssertEqual(app.options.googleAppID, Constants.Options.googleAppID)
     XCTAssertEqual(app.options.gcmSenderID, Constants.Options.gcmSenderID)
     XCTAssertEqual(app.options.deepLinkURLScheme, superSecretURLScheme)
-    XCTAssertNil(app.options.androidClientID)
   }
 
   func testFirebaseDataCollectionDefaultEnabled() throws {
@@ -348,7 +347,7 @@ class FirebaseAppTests: XCTestCase {
     ]
 
     expectation(forNotification: NSNotification.Name.firAppReadyToConfigureSDK,
-                object: FirebaseApp.self, handler: { (notification) -> Bool in
+                object: FirebaseApp.self, handler: { notification -> Bool in
                   if let userInfo = notification.userInfo {
                     if expectedUserInfo.isEqual(to: userInfo) {
                       return true

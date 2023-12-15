@@ -20,8 +20,7 @@
 #include <future>  // NOLINT(build/c++11)
 #include <memory>
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
-#import "Interop/Auth/Public/FIRAuthInterop.h"
+#import "FirebaseAuth/Interop/FIRAuthInterop.h"
 
 #include "Firestore/core/src/util/statusor.h"
 #include "Firestore/core/src/util/string_apple.h"
@@ -152,6 +151,28 @@ TEST(FirebaseAuthCredentialsProviderTest, InvalidateToken) {
     EXPECT_EQ("token for fake uid", token.token());
     EXPECT_EQ("fake uid", token.user().uid());
   });
+}
+
+// Catch race conditions in FirebaseAuthCredentialsProvider::GetToken() when
+// run under thread sanitizer.
+// See https://github.com/firebase/firebase-ios-sdk/issues/10393
+TEST(FirebaseAuthCredentialsProviderTest, GetTokenCalledByAnotherThread) {
+  FIRApp* app = testutil::AppForUnitTesting();
+  FSTAuthFake* auth = [[FSTAuthFake alloc] initWithToken:@"token for fake uid"
+                                                     uid:@"fake uid"];
+  FirebaseAuthCredentialsProvider credentials_provider(app, auth);
+
+  std::thread thread1([&credentials_provider] {
+    credentials_provider.GetToken(
+        [](util::StatusOr<AuthToken> result) { EXPECT_TRUE(result.ok()); });
+  });
+  std::thread thread2([&credentials_provider] {
+    credentials_provider.GetToken(
+        [](util::StatusOr<AuthToken> result) { EXPECT_TRUE(result.ok()); });
+  });
+
+  thread1.join();
+  thread2.join();
 }
 
 }  // namespace credentials

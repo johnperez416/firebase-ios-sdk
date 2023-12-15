@@ -12,15 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#if __has_include(<UIKit/UIKit.h>)
+#import <UIKit/UIKit.h>
+#endif
+
+#if __has_include(<AppKit/AppKit.h>)
+#import <AppKit/AppKit.h>
+#endif
+
+#if __has_include(<WatchKit/WatchKit.h>)
+#import <WatchKit/WatchKit.h>
+#endif
+
 #import "FirebaseCore/Tests/Unit/FIRTestCase.h"
 #import "FirebaseCore/Tests/Unit/FIRTestComponents.h"
 
 #import <GoogleUtilities/GULAppEnvironmentUtil.h>
+#import "FirebaseCore/Extension/FIRAppInternal.h"
+#import "FirebaseCore/Extension/FIRComponentType.h"
+#import "FirebaseCore/Extension/FIRHeartbeatLogger.h"
+#import "FirebaseCore/Extension/FIROptionsInternal.h"
 #import "FirebaseCore/Sources/FIRAnalyticsConfiguration.h"
-#import "FirebaseCore/Sources/Private/FIRAppInternal.h"
-#import "FirebaseCore/Sources/Private/FIRComponentType.h"
-#import "FirebaseCore/Sources/Private/FIRCoreDiagnosticsConnector.h"
-#import "FirebaseCore/Sources/Private/FIROptionsInternal.h"
 #import "SharedTestUtilities/FIROptionsMock.h"
 
 NSString *const kFIRTestAppName1 = @"test_app_name_1";
@@ -43,7 +55,7 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
 + (void)logAppInfo:(NSNotification *)notification;
 + (BOOL)validateAppID:(NSString *)appID;
 + (BOOL)validateAppIDFormat:(NSString *)appID withVersion:(NSString *)version;
-+ (BOOL)validateAppIDFingerprint:(NSString *)appID withVersion:(NSString *)version;
++ (BOOL)validateBundleIDHashWithinAppID:(NSString *)appID forVersion:(NSString *)version;
 
 + (nullable NSNumber *)readDataCollectionSwitchFromPlist;
 + (nullable NSNumber *)readDataCollectionSwitchFromUserDefaultsForApp:(FIRApp *)app;
@@ -53,8 +65,8 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
 @interface FIRAppTest : FIRTestCase
 
 @property(nonatomic) id appClassMock;
-@property(nonatomic) id mockCoreDiagnosticsConnector;
 @property(nonatomic) NSNotificationCenter *notificationCenter;
+@property(nonatomic) id mockHeartbeatLogger;
 
 /// If `YES` then throws when `logCoreTelemetryWithOptions:` method is called.
 @property(nonatomic) BOOL assertNoLogCoreTelemetry;
@@ -69,18 +81,15 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
   [FIRApp resetApps];
   // TODO: Don't mock the class we are testing.
   _appClassMock = OCMClassMock([FIRApp class]);
-  _mockCoreDiagnosticsConnector = OCMClassMock([FIRCoreDiagnosticsConnector class]);
+
+  // Set up mocks for all instances of `FIRHeartbeatLogger`.
+  _mockHeartbeatLogger = OCMClassMock([FIRHeartbeatLogger class]);
+  OCMStub([_mockHeartbeatLogger alloc]).andReturn(_mockHeartbeatLogger);
+  OCMStub([_mockHeartbeatLogger initWithAppID:OCMOCK_ANY]).andReturn(_mockHeartbeatLogger);
 
   [FIROptionsMock mockFIROptions];
 
   self.assertNoLogCoreTelemetry = NO;
-  OCMStub(ClassMethod([self.mockCoreDiagnosticsConnector logCoreTelemetryWithOptions:[OCMArg any]]))
-      .andDo(^(NSInvocation *invocation) {
-        if (self.assertNoLogCoreTelemetry) {
-          XCTFail(@"Method `-[mockCoreDiagnosticsConnector logCoreTelemetryWithOptions:]` must not "
-                  @"be called");
-        }
-      });
 
   // TODO: Remove all usages of defaultCenter in Core, then we can instantiate an instance here to
   //       inject instead of using defaultCenter.
@@ -97,8 +106,19 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
   [_appClassMock stopMocking];
   _appClassMock = nil;
   _notificationCenter = nil;
-  _mockCoreDiagnosticsConnector = nil;
+  _mockHeartbeatLogger = nil;
 
+  [super tearDown];
+}
+
++ (void)tearDown {
+  // We stop mocking `FIRHeartbeatLogger` in the class `tearDown` method to
+  // prevent interfering with other tests that use the real `FIRHeartbeatLogger`.
+  // Doing this in the instance `tearDown` causes test failures due to a race
+  // condition between `NSNoticationCenter` and `OCMVerifyAllWithDelay`.
+  // Affected tests:
+  // - testHeartbeatLogIsAttemptedWhenAppDidBecomeActive
+  [OCMClassMock([FIRHeartbeatLogger class]) stopMocking];
   [super tearDown];
 }
 
@@ -403,33 +423,34 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
 #pragma mark - App ID v1
 
 - (void)testAppIDV1 {
-  // Missing separator between platform:fingerprint.
+  // Missing separator between platform:hashed bundle ID.
   XCTAssertFalse([FIRApp validateAppID:@"1:1337:iosdeadbeef"]);
 
   // Wrong platform "android".
   XCTAssertFalse([FIRApp validateAppID:@"1:1337:android:deadbeef"]);
 
-  // The fingerprint, aka 4th field, should only contain hex characters.
+  // The hashed bundle ID, aka 4th field, should only contain hex characters.
   XCTAssertFalse([FIRApp validateAppID:@"1:1337:ios:123abcxyz"]);
 
-  // The fingerprint, aka 4th field, is not tested in V1, so a bad value shouldn't cause a failure.
+  // The hashed bundle ID, aka 4th field, is not tested in V1, so a bad value shouldn't cause a
+  // failure.
   XCTAssertTrue([FIRApp validateAppID:@"1:1337:ios:deadbeef"]);
 }
 
 #pragma mark - App ID v2
 
 - (void)testAppIDV2 {
-  // Missing separator between platform:fingerprint.
+  // Missing separator between platform:hashed bundle ID.
   XCTAssertTrue([FIRApp validateAppID:@"2:1337:ios5e18052ab54fbfec"]);
 
   // Unknown versions may contain anything.
   XCTAssertTrue([FIRApp validateAppID:@"2:1337:ios:123abcxyz"]);
   XCTAssertTrue([FIRApp validateAppID:@"2:thisdoesn'teven_m:a:t:t:e:r_"]);
 
-  // Known good fingerprint.
+  // Known good hashed bundle ID.
   XCTAssertTrue([FIRApp validateAppID:@"2:1337:ios:5e18052ab54fbfec"]);
 
-  // Unknown fingerprint, not tested so shouldn't cause a failure.
+  // Unknown hashed bundle ID, not tested so shouldn't cause a failure.
   XCTAssertTrue([FIRApp validateAppID:@"2:1337:ios:deadbeef"]);
 }
 
@@ -551,36 +572,36 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
   XCTAssertFalse([FIRApp validateAppIDFormat:@"1:1337:ios:deadbeef:ab" withVersion:kGoodVersionV1]);
 }
 
-- (void)testAppIDFingerprintInvalid {
+- (void)testAppIDContainsInvalidBundleIDHash {
   OCMStub([self.appClassMock actualBundleID]).andReturn(@"com.google.bundleID");
-  // Some direct tests of the validateAppIDFingerprint:withVersion: method.
+  // Some direct tests of the validateBundleIDHashWithinAppID:forVersion: method.
   // Sanity checks first.
   NSString *const kGoodAppIDV1 = @"1:1337:ios:deadbeef";
   NSString *const kGoodVersionV1 = @"1";
-  XCTAssertTrue([FIRApp validateAppIDFingerprint:kGoodAppIDV1 withVersion:kGoodVersionV1]);
+  XCTAssertTrue([FIRApp validateBundleIDHashWithinAppID:kGoodAppIDV1 forVersion:kGoodVersionV1]);
 
   NSString *const kGoodAppIDV2 = @"2:1337:ios:5e18052ab54fbfec";
   NSString *const kGoodVersionV2 = @"2";
   XCTAssertTrue([FIRApp validateAppIDFormat:kGoodAppIDV2 withVersion:kGoodVersionV2]);
 
   // Nil or empty strings.
-  XCTAssertFalse([FIRApp validateAppIDFingerprint:kGoodAppIDV1 withVersion:nil]);
-  XCTAssertFalse([FIRApp validateAppIDFingerprint:kGoodAppIDV1 withVersion:@""]);
-  XCTAssertFalse([FIRApp validateAppIDFingerprint:nil withVersion:kGoodVersionV1]);
-  XCTAssertFalse([FIRApp validateAppIDFingerprint:@"" withVersion:kGoodVersionV1]);
-  XCTAssertFalse([FIRApp validateAppIDFingerprint:nil withVersion:nil]);
-  XCTAssertFalse([FIRApp validateAppIDFingerprint:@"" withVersion:@""]);
+  XCTAssertFalse([FIRApp validateBundleIDHashWithinAppID:kGoodAppIDV1 forVersion:nil]);
+  XCTAssertFalse([FIRApp validateBundleIDHashWithinAppID:kGoodAppIDV1 forVersion:@""]);
+  XCTAssertFalse([FIRApp validateBundleIDHashWithinAppID:nil forVersion:kGoodVersionV1]);
+  XCTAssertFalse([FIRApp validateBundleIDHashWithinAppID:@"" forVersion:kGoodVersionV1]);
+  XCTAssertFalse([FIRApp validateBundleIDHashWithinAppID:nil forVersion:nil]);
+  XCTAssertFalse([FIRApp validateBundleIDHashWithinAppID:@"" forVersion:@""]);
 
   // App ID contains only the version prefix.
-  XCTAssertFalse([FIRApp validateAppIDFingerprint:kGoodVersionV1 withVersion:kGoodVersionV1]);
+  XCTAssertFalse([FIRApp validateBundleIDHashWithinAppID:kGoodVersionV1 forVersion:kGoodVersionV1]);
   // The version is the entire app ID.
-  XCTAssertFalse([FIRApp validateAppIDFingerprint:kGoodAppIDV1 withVersion:kGoodAppIDV1]);
+  XCTAssertFalse([FIRApp validateBundleIDHashWithinAppID:kGoodAppIDV1 forVersion:kGoodAppIDV1]);
 }
 
 // Uncomment if you need to measure performance of [FIRApp validateAppID:].
 // It is commented because measures are heavily dependent on a build agent configuration,
 // so it cannot produce reliable resault on CI
-//- (void)testAppIDFingerprintPerfomance {
+//- (void)testAppIDValidationPerfomance {
 //  [self measureBlock:^{
 //    for (NSInteger i = 0; i < 100; ++i) {
 //      [self testAppIDPrefix];
@@ -746,7 +767,7 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
   [self.notificationCenter postNotificationName:[self appDidBecomeActiveNotificationName]
                                          object:nil];
   // Wait for some time because diagnostics is logged asynchronously.
-  OCMVerifyAllWithDelay(self.mockCoreDiagnosticsConnector, 1);
+  OCMVerifyAll(self.mockHeartbeatLogger);
 }
 
 #pragma mark - Analytics Flag Tests
@@ -805,127 +826,14 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
   XCTAssertFalse([FIRApp isDefaultAppConfigured]);
 }
 
-- (void)testRegisterLibrary_InvalidLibraryName {
-  NSString *originalFirebaseUserAgent = [FIRApp firebaseUserAgent];
-  [FIRApp registerLibrary:@"Oops>" withVersion:@"1.0.0"];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] isEqualToString:originalFirebaseUserAgent]);
-}
+#pragma mark - Core Telemetry
 
-- (void)testRegisterLibrary_InvalidLibraryVersion {
-  NSString *originalFirebaseUserAgent = [FIRApp firebaseUserAgent];
-  [FIRApp registerLibrary:@"ValidName" withVersion:@"1.0.0+"];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] isEqualToString:originalFirebaseUserAgent]);
-}
-
-- (void)testRegisterLibrary_SingleLibrary {
-  [FIRApp registerLibrary:@"ValidName" withVersion:@"1.0.0"];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:@"ValidName/1.0.0"]);
-}
-
-- (void)testRegisterLibrary_MultipleLibraries {
-  [FIRApp registerLibrary:@"ValidName" withVersion:@"1.0.0"];
-  [FIRApp registerLibrary:@"ValidName2" withVersion:@"2.0.0"];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:@"ValidName/1.0.0 ValidName2/2.0.0"]);
-}
-
-- (void)testRegisterLibrary_RegisteringConformingLibrary {
-  Class testClass = [FIRTestClass class];
-  [FIRApp registerInternalLibrary:testClass withName:@"ValidName" withVersion:@"1.0.0"];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:@"ValidName/1.0.0"]);
-}
-
-- (void)testRegisterLibrary_RegisteringNonConformingLibrary {
-  XCTAssertThrows([FIRApp registerInternalLibrary:[NSString class]
-                                         withName:@"InvalidLibrary"
-                                      withVersion:@"1.0.0"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"InvalidLibrary`/1.0.0"]);
-}
-
-- (void)testFirebaseUserAgent_ApplePlatformFlag {
-  // When a Catalyst app is run on macOS then both `TARGET_OS_MACCATALYST` and `TARGET_OS_IOS` are
-  // `true`.
-#if TARGET_OS_MACCATALYST
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/ios"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/tvos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/macos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/watchos"]);
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:@"apple-platform/maccatalyst"]);
-#elif TARGET_OS_IOS
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:@"apple-platform/ios"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/tvos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/macos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/watchos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/maccatalyst"]);
-#endif  // TARGET_OS_MACCATALYST
-
-#if TARGET_OS_TV
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/ios"]);
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:@"apple-platform/tvos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/macos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/watchos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/maccatalyst"]);
-#endif  // TARGET_OS_TV
-
-#if TARGET_OS_OSX
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/ios"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/tvos"]);
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:@"apple-platform/macos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/watchos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/maccatalyst"]);
-#endif  // TARGET_OS_OSX
-
-#if TARGET_OS_WATCH
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/ios"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/tvos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/macos"]);
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:@"apple-platform/watchos"]);
-  XCTAssertFalse([[FIRApp firebaseUserAgent] containsString:@"apple-platform/maccatalyst"]);
-#endif  // TARGET_OS_WATCH
-}
-
-- (void)testFirebaseUserAgent_DeploymentType {
-#if SWIFT_PACKAGE
-  NSString *deploymentType = @"swiftpm";
-#elif FIREBASE_BUILD_CARTHAGE
-  NSString *deploymentType = @"carthage";
-#elif FIREBASE_BUILD_ZIP_FILE
-  NSString *deploymentType = @"zip";
-#else
-  NSString *deploymentType = @"cocoapods";
-#endif
-
-  NSString *expectedComponent = [NSString stringWithFormat:@"deploy/%@", deploymentType];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:expectedComponent]);
-}
-
-- (void)testFirebaseUserAgent_DeviceModel {
-  NSString *expectedComponent =
-      [NSString stringWithFormat:@"device/%@", [GULAppEnvironmentUtil deviceModel]];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:expectedComponent]);
-}
-
-- (void)testFirebaseUserAgent_OSVersion {
-  NSString *expectedComponent =
-      [NSString stringWithFormat:@"os-version/%@", [GULAppEnvironmentUtil systemVersion]];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:expectedComponent]);
-}
-
-- (void)testFirebaseUserAgent_IsFromAppStore {
-  NSString *appStoreValue = [GULAppEnvironmentUtil isFromAppStore] ? @"true" : @"false";
-  NSString *expectedComponent = [NSString stringWithFormat:@"appstore/%@", appStoreValue];
-  XCTAssertTrue([[FIRApp firebaseUserAgent] containsString:expectedComponent]);
-}
-
-#pragma mark - Core Diagnostics
-
-- (void)testCoreDiagnosticsLoggedWhenAppDidBecomeActive {
-  FIRApp *app = [self createConfiguredAppWithName:NSStringFromSelector(_cmd)];
-  [self expectCoreDiagnosticsDataLogWithOptions:app.options];
-
+- (void)testHeartbeatLogIsAttemptedWhenAppDidBecomeActive {
+  [self createConfiguredAppWithName:NSStringFromSelector(_cmd)];
+  OCMExpect([self.mockHeartbeatLogger log]).andDo(nil);
   [self.notificationCenter postNotificationName:[self appDidBecomeActiveNotificationName]
                                          object:nil];
-
-  OCMVerifyAllWithDelay(self.mockCoreDiagnosticsConnector, 0.5);
+  OCMVerifyAll(self.mockHeartbeatLogger);
 }
 
 #pragma mark - private
@@ -953,28 +861,18 @@ NSString *const kFIRTestAppName2 = @"test-app-name-2";
   };
 }
 
-- (void)expectCoreDiagnosticsDataLogWithOptions:(nullable FIROptions *)expectedOptions {
-  [self.mockCoreDiagnosticsConnector stopMocking];
-  self.mockCoreDiagnosticsConnector = nil;
-  self.mockCoreDiagnosticsConnector = OCMClassMock([FIRCoreDiagnosticsConnector class]);
-
-  OCMExpect(ClassMethod([self.mockCoreDiagnosticsConnector
-      logCoreTelemetryWithOptions:[OCMArg checkWithBlock:^BOOL(FIROptions *options) {
-        if (!expectedOptions) {
-          return YES;
-        }
-        return [options.googleAppID isEqualToString:expectedOptions.googleAppID] &&
-               [options.GCMSenderID isEqualToString:expectedOptions.GCMSenderID];
-      }]]));
-}
-
 - (NSNotificationName)appDidBecomeActiveNotificationName {
-#if TARGET_OS_IOS || TARGET_OS_TV
+#if TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)
   return UIApplicationDidBecomeActiveNotification;
-#endif
-
-#if TARGET_OS_OSX
+#elif TARGET_OS_OSX
   return NSApplicationDidBecomeActiveNotification;
+#elif TARGET_OS_WATCH
+  // See comment in `- [FIRApp subscribeForAppDidBecomeActiveNotifications]`.
+  if (@available(watchOS 7.0, *)) {
+    return WKApplicationDidBecomeActiveNotification;
+  } else {
+    return kFIRAppReadyToConfigureSDKNotification;
+  }
 #endif
 }
 

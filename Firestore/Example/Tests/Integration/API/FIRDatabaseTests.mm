@@ -14,20 +14,30 @@
  * limitations under the License.
  */
 
+// TODO(wuandy): Delete this once isPersistenceEnabled and cacheSizeBytes are removed.
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 #import <FirebaseFirestore/FirebaseFirestore.h>
 
 #import <XCTest/XCTest.h>
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FIRAppInternal.h"
 #import "Firestore/Example/Tests/Util/FSTEventAccumulator.h"
 #import "Firestore/Example/Tests/Util/FSTIntegrationTestCase.h"
 #import "Firestore/Source/API/FIRFirestore+Internal.h"
+#import "Firestore/Source/API/FIRLocalCacheSettings+Internal.h"
 
 #include "Firestore/core/src/api/query_snapshot.h"
+#include "Firestore/core/src/api/settings.h"
 #include "Firestore/core/src/core/firestore_client.h"
+#include "Firestore/core/src/model/database_id.h"
+#include "Firestore/core/src/util/string_apple.h"
 #include "Firestore/core/test/unit/testutil/app_testing.h"
 
+using api::Settings;
+using firebase::firestore::model::DatabaseId;
 using firebase::firestore::testutil::AppForUnitTesting;
+using firebase::firestore::util::MakeNSString;
 using firebase::firestore::util::MakeString;
 using firebase::firestore::util::TimerId;
 
@@ -35,6 +45,11 @@ using firebase::firestore::util::TimerId;
 @end
 
 @implementation FIRDatabaseTests
+
+- (void)tearDown {
+  [FIRApp resetApps];
+  [super tearDown];
+}
 
 - (void)testCanUpdateAnExistingDocument {
   FIRDocumentReference *doc = [self.db documentWithPath:@"rooms/eros"];
@@ -1742,6 +1757,135 @@ using firebase::firestore::util::TimerId;
   [firestore waitForPendingWritesWithCompletion:
                  [self completionForExpectationWithName:@"Wait for pending writes"]];
   [self awaitExpectations];
+}
+
+- (void)testDefaultNamedDbIsSame {
+  [FIRApp configure];
+  FIRApp *app = [FIRApp defaultApp];
+  FIRFirestore *db1 = [FIRFirestore firestore];
+  FIRFirestore *db2 = [FIRFirestore firestoreForApp:app];
+  FIRFirestore *db3 = [FIRFirestore firestoreForApp:app database:@"(default)"];
+  FIRFirestore *db4 = [FIRFirestore firestoreForDatabase:@"(default)"];
+
+  XCTAssertIdentical(db1, db2);
+  XCTAssertIdentical(db1, db3);
+  XCTAssertIdentical(db1, db4);
+}
+
+- (void)testSameNamedDbIsSame {
+  [FIRApp configure];
+  FIRApp *app = [FIRApp defaultApp];
+  FIRFirestore *db1 = [FIRFirestore firestoreForApp:app database:@"myDb"];
+  FIRFirestore *db2 = [FIRFirestore firestoreForDatabase:@"myDb"];
+
+  XCTAssertIdentical(db1, db2);
+}
+
+- (void)testNamedDbHaveDifferentInstance {
+  [FIRApp configure];
+  FIRFirestore *db1 = [FIRFirestore firestore];
+  FIRFirestore *db2 = [FIRFirestore firestoreForDatabase:@"db1"];
+  FIRFirestore *db3 = [FIRFirestore firestoreForDatabase:@"db2"];
+
+  XCTAssertNotIdentical(db1, db2);
+  XCTAssertNotIdentical(db1, db3);
+  XCTAssertNotIdentical(db2, db3);
+}
+
+- (void)testCannotMixCacheConfigAPIs {
+  [FIRApp configure];
+  FIRFirestore *db1 = [FIRFirestore firestore];
+
+  FIRFirestoreSettings *settings = db1.settings;
+  settings.cacheSizeBytes = 10000000;
+  settings.cacheSettings = [[FIRPersistentCacheSettings alloc] init];
+
+  XCTAssertThrowsSpecific(db1.settings = settings, NSException);
+
+  FIRFirestore *db2 = [FIRFirestore firestoreForDatabase:@"db2"];
+  settings = db2.settings;
+  settings.cacheSettings = [[FIRMemoryCacheSettings alloc] init];
+  settings.persistenceEnabled = NO;
+
+  XCTAssertThrowsSpecific(db2.settings = settings, NSException);
+}
+
+- (void)testMinimumCacheSize {
+  XCTAssertThrowsSpecific([[FIRPersistentCacheSettings alloc] initWithSizeBytes:@(1024 * 1024 - 1)],
+                          NSException);
+}
+
+- (void)testUnlimitedCacheSize {
+  FIRPersistentCacheSettings *cacheSettings =
+      [[FIRPersistentCacheSettings alloc] initWithSizeBytes:@(Settings::CacheSizeUnlimited)];
+  XCTAssertEqual(cacheSettings.internalSettings.size_bytes(), Settings::CacheSizeUnlimited);
+
+  self.db.settings.cacheSettings = cacheSettings;
+
+  FIRDocumentReference *doc = [self.db documentWithPath:@"rooms/eros"];
+  NSDictionary<NSString *, id> *data = @{@"value" : @"foo"};
+  [self writeDocumentRef:doc data:data];
+  FIRDocumentSnapshot *result = [self readDocumentForRef:doc];
+  XCTAssertEqualObjects(result.data, data);
+}
+
+- (void)testGetValidPersistentCacheIndexManager {
+  [FIRApp configure];
+
+  FIRFirestore *db1 = [FIRFirestore firestoreForDatabase:@"PersistentCacheIndexManagerDB1"];
+  FIRFirestoreSettings *settings1 = [db1 settings];
+  [settings1 setCacheSettings:[[FIRPersistentCacheSettings alloc] init]];
+  [db1 setSettings:settings1];
+
+  XCTAssertNotNil(db1.persistentCacheIndexManager);
+
+  // Use persistent disk cache (default)
+  FIRFirestore *db2 = [FIRFirestore firestoreForDatabase:@"PersistentCacheIndexManagerDB2"];
+  XCTAssertNotNil(db2.persistentCacheIndexManager);
+
+  // Disable persistent disk cache
+  FIRFirestore *db3 = [FIRFirestore firestoreForDatabase:@"MemoryCacheIndexManagerDB1"];
+  FIRFirestoreSettings *settings3 = [db3 settings];
+  [settings3 setCacheSettings:[[FIRMemoryCacheSettings alloc] init]];
+  [db3 setSettings:settings3];
+
+  XCTAssertNil(db3.persistentCacheIndexManager);
+
+  // Disable persistent disk cache (deprecated)
+  FIRFirestore *db4 = [FIRFirestore firestoreForDatabase:@"PersistentCacheIndexManagerDB4"];
+  FIRFirestoreSettings *settings4 = [db4 settings];
+  settings4.persistenceEnabled = NO;
+  [db4 setSettings:settings4];
+  XCTAssertNil(db4.persistentCacheIndexManager);
+}
+
+- (void)testCanGetSameOrDifferentPersistentCacheIndexManager {
+  [FIRApp configure];
+  // Use persistent disk cache (explicit)
+  FIRFirestore *db1 = [FIRFirestore firestoreForDatabase:@"PersistentCacheIndexManagerDB5"];
+  FIRFirestoreSettings *settings1 = [db1 settings];
+  [settings1 setCacheSettings:[[FIRPersistentCacheSettings alloc] init]];
+  [db1 setSettings:settings1];
+  XCTAssertEqual(db1.persistentCacheIndexManager, db1.persistentCacheIndexManager);
+
+  // Use persistent disk cache (default)
+  FIRFirestore *db2 = [FIRFirestore firestoreForDatabase:@"PersistentCacheIndexManagerDB6"];
+  XCTAssertEqual(db2.persistentCacheIndexManager, db2.persistentCacheIndexManager);
+
+  XCTAssertNotEqual(db1.persistentCacheIndexManager, db2.persistentCacheIndexManager);
+
+  FIRFirestore *db3 = [FIRFirestore firestoreForDatabase:@"PersistentCacheIndexManagerDB7"];
+  FIRFirestoreSettings *settings3 = [db3 settings];
+  [settings3 setCacheSettings:[[FIRPersistentCacheSettings alloc] init]];
+  [db3 setSettings:settings3];
+  XCTAssertNotEqual(db1.persistentCacheIndexManager, db3.persistentCacheIndexManager);
+  XCTAssertNotEqual(db2.persistentCacheIndexManager, db3.persistentCacheIndexManager);
+
+  // Use persistent disk cache (default)
+  FIRFirestore *db4 = [FIRFirestore firestoreForDatabase:@"PersistentCacheIndexManagerDB8"];
+  XCTAssertNotEqual(db1.persistentCacheIndexManager, db4.persistentCacheIndexManager);
+  XCTAssertNotEqual(db2.persistentCacheIndexManager, db4.persistentCacheIndexManager);
+  XCTAssertNotEqual(db3.persistentCacheIndexManager, db4.persistentCacheIndexManager);
 }
 
 @end

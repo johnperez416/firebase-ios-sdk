@@ -246,13 +246,9 @@ bool View::ShouldWaitForSyncedDocument(const Document& new_doc,
           !new_doc->has_local_mutations());
 }
 
-ViewChange View::ApplyChanges(const ViewDocumentChanges& doc_changes) {
-  return ApplyChanges(doc_changes, {});
-}
-
-ViewChange View::ApplyChanges(
-    const ViewDocumentChanges& doc_changes,
-    const absl::optional<TargetChange>& target_change) {
+ViewChange View::ApplyChanges(const ViewDocumentChanges& doc_changes,
+                              const absl::optional<TargetChange>& target_change,
+                              bool targetIsPendingReset) {
   HARD_ASSERT(!doc_changes.needs_refill(),
               "Cannot apply changes that need a refill");
 
@@ -275,8 +271,14 @@ ViewChange View::ApplyChanges(
       });
 
   ApplyTargetChange(target_change);
-  std::vector<LimboDocumentChange> limbo_changes = UpdateLimboDocuments();
-  bool synced = limbo_documents_.empty() && current_;
+  std::vector<LimboDocumentChange> limbo_changes =
+      targetIsPendingReset ? std::vector<LimboDocumentChange>{}
+                           : UpdateLimboDocuments();
+
+  // We are at synced state if there is no limbo docs are waiting to be
+  // resolved, view is current with the backend, and the query is not pending
+  // to reset due to existence filter mismatch.
+  bool synced = limbo_documents_.empty() && current_ && !targetIsPendingReset;
   SyncState new_sync_state = synced ? SyncState::Synced : SyncState::Local;
   bool sync_state_changed = new_sync_state != sync_state_;
   sync_state_ = new_sync_state;
@@ -285,6 +287,8 @@ ViewChange View::ApplyChanges(
     // No changes.
     return ViewChange(absl::nullopt, std::move(limbo_changes));
   } else {
+    bool has_cached_results =
+        target_change.has_value() && !target_change->resume_token().empty();
     ViewSnapshot snapshot{query_,
                           doc_changes.document_set(),
                           old_documents,
@@ -292,7 +296,8 @@ ViewChange View::ApplyChanges(
                           doc_changes.mutated_keys(),
                           /*from_cache=*/new_sync_state == SyncState::Local,
                           sync_state_changed,
-                          /*excludes_metadata_changes=*/false};
+                          /*excludes_metadata_changes=*/false,
+                          has_cached_results};
 
     return ViewChange(std::move(snapshot), std::move(limbo_changes));
   }

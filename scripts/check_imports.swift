@@ -24,26 +24,24 @@ import Foundation
 
 // Skip these directories. Imports should only be repo-relative in libraries
 // and unit tests.
-let skipDirPatterns = ["/Sample/", "/Pods/", "FirebaseStorage/Tests/Integration",
+let skipDirPatterns = ["/Sample/", "/Pods/",
                        "FirebaseDynamicLinks/Tests/Integration",
                        "FirebaseInAppMessaging/Tests/Integration/",
                        "SymbolCollisionTest/", "/gen/",
                        "CocoapodsIntegrationTest/", "FirebasePerformance/Tests/TestApp/",
-                       "cmake-build-debug/", "build/",
+                       "cmake-build-debug/", "build/", "ObjCIntegration/",
                        "FirebasePerformance/Tests/FIRPerfE2E/"] +
   [
     "CoreOnly/Sources", // Skip Firebase.h.
-    "SwiftPMTests", // The SwiftPM imports test module imports.
+    "SwiftPMTests", // The SwiftPM tests test module imports.
+    "ClientApp", // The ClientApp tests module imports.
+    "FirebaseSessions/Protogen/", // Generated nanopb code with imports
   ] +
 
   // The following are temporary skips pending working through a first pass of the repo:
   [
-    "FirebaseAppDistribution",
-    "FirebaseCore/Sources/Private", // TODO: work through adding this back.
-    "Firebase/CoreDiagnostics",
     "FirebaseDatabase/Sources/third_party/Wrap-leveldb", // Pending SwiftPM for leveldb.
     "Example",
-    "FirebaseInstallations/Source/Tests/Unit/",
     "Firestore",
     "GoogleUtilitiesComponents",
     "FirebasePerformance/ProtoSupport/",
@@ -68,7 +66,8 @@ private class ErrorLogger {
   }
 }
 
-private func checkFile(_ file: String, logger: ErrorLogger, inRepo repoURL: URL) {
+private func checkFile(_ file: String, logger: ErrorLogger, inRepo repoURL: URL,
+                       isSwiftFile: Bool) {
   var fileContents = ""
   do {
     fileContents = try String(contentsOfFile: file, encoding: .utf8)
@@ -77,13 +76,30 @@ private func checkFile(_ file: String, logger: ErrorLogger, inRepo repoURL: URL)
     // Not a source file, give up and return.
     return
   }
+
+  guard !isSwiftFile else {
+    // Swift specific checks.
+    fileContents.components(separatedBy: .newlines)
+      .enumerated() // [(lineNum, line), ...]
+      .filter { $1.starts(with: "import FirebaseCoreExtension") }
+      .forEach { lineNum, line in
+        logger
+          .importLog(
+            "Use `@_implementationOnly import FirebaseCoreExtension` when importing `FirebaseCoreExtension`.",
+            file, lineNum
+          )
+      }
+    return
+  }
+
   let isPublic = file.range(of: "/Public/") != nil &&
     // TODO: Skip legacy GDTCCTLibrary file that isn't Public and should be moved.
+    // This test is used in the GoogleDataTransport's repo's CI clone of this repo.
     file.range(of: "GDTCCTLibrary/Public/GDTCOREvent+GDTCCTSupport.h") == nil
   let isPrivate = file.range(of: "/Sources/Private/") != nil ||
     // Delete when FirebaseInstallations fixes directory structure.
     file.range(of: "Source/Library/Private/FirebaseInstallationsInternal.h") != nil ||
-    file.range(of: "GDTCORLibrary/Internal/GoogleDataTransportInternal.h") != nil
+    file.range(of: "FirebaseCore/Extension") != nil
 
   // Treat all files with names finishing on "Test" or "Tests" as files with tests.
   let isTestFile = file.contains("Test.m") || file.contains("Tests.m") ||
@@ -108,9 +124,6 @@ private func checkFile(_ file: String, logger: ErrorLogger, inRepo repoURL: URL)
     } else if file.contains("FirebaseTestingSupport") {
       // Module imports ok in SPM only test infrastructure.
       continue
-    } else if line.starts(with: "@import") {
-      // "@import" is only allowed for Swift Package Manager.
-      logger.importLog("@import should not be used in CocoaPods library code", file, lineNum)
     }
 
     // "The #else of a SWIFT_PACKAGE check should only do CocoaPods module-style imports."
@@ -148,7 +161,10 @@ private func checkFile(_ file: String, logger: ErrorLogger, inRepo repoURL: URL)
         }
       } else if importFile.first == "<", !isPrivate, !isTestFile, !isBridgingHeader, !isPublic {
         // Verify that double quotes are always used for intra-module imports.
-        if importFileRaw.starts(with: "Firebase") {
+        if importFileRaw.starts(with: "Firebase"),
+           // Allow intra-module imports of FirebaseAppCheckInterop.
+           // TODO: Remove the FirebaseAppCheckInterop exception when it's moved to a separate repo.
+           importFile.range(of: "FirebaseAppCheckInterop/FirebaseAppCheckInterop.h") == nil {
           logger
             .importLog("Imports internal to the repo should use double quotes not \"<\"", file,
                        lineNum)
@@ -185,14 +201,15 @@ private func main() -> Int32 {
     let enumerator = FileManager.default.enumerator(atPath: rootURL.path)
     whileLoop: while let file = enumerator?.nextObject() as? String {
       if let fType = enumerator?.fileAttributes?[FileAttributeKey.type] as? FileAttributeType,
-        fType == .typeRegular {
+         fType == .typeRegular {
         if file.starts(with: ".") {
           continue
         }
         if !(file.hasSuffix(".h") ||
           file.hasSuffix(".m") ||
           file.hasSuffix(".mm") ||
-          file.hasSuffix(".c")) {
+          file.hasSuffix(".c") ||
+          file.hasSuffix(".swift")) {
           continue
         }
         let fullTransformPath = rootURL.path + "/" + file
@@ -201,7 +218,12 @@ private func main() -> Int32 {
             continue whileLoop
           }
         }
-        checkFile(fullTransformPath, logger: logger, inRepo: repoURL)
+        checkFile(
+          fullTransformPath,
+          logger: logger,
+          inRepo: repoURL,
+          isSwiftFile: file.hasSuffix(".swift")
+        )
       }
     }
   }

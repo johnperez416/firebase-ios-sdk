@@ -14,19 +14,33 @@
 
 include(ExternalProject)
 
+include(python_setup)
+FirebaseSetupPythonInterpreter(
+  OUTVAR MY_PYTHON_EXECUTABLE
+  KEY LevelDbPatch
+)
+
 if(TARGET leveldb)
   return()
 endif()
 
 set(version 1.22)
 
+ExternalProject_Get_property(snappy SOURCE_DIR)
+set(snappy_source_dir "${SOURCE_DIR}")
+ExternalProject_Get_property(snappy BINARY_DIR)
+set(snappy_binary_dir "${BINARY_DIR}")
+
+set(additional_patch_file ${CMAKE_CURRENT_LIST_DIR}/leveldb-${version}_windows_paths.patch)
+
 ExternalProject_Add(
   leveldb
 
+  DEPENDS snappy
+
   DOWNLOAD_DIR ${FIREBASE_DOWNLOAD_DIR}
-  DOWNLOAD_NAME leveldb-${version}.tar.gz
-  URL https://github.com/google/leveldb/archive/${version}.tar.gz
-  URL_HASH SHA256=55423cac9e3306f4a9502c738a001e4a339d1a38ffbee7572d4a07d5d63949b2
+  GIT_REPOSITORY https://github.com/google/leveldb.git
+  GIT_TAG "${version}"
 
   PREFIX ${PROJECT_BINARY_DIR}
 
@@ -34,6 +48,7 @@ ExternalProject_Add(
   BUILD_COMMAND     ""
   INSTALL_COMMAND   ""
   TEST_COMMAND      ""
+  PATCH_COMMAND     "${MY_PYTHON_EXECUTABLE}" ${CMAKE_CURRENT_LIST_DIR}/leveldb_patch.py --snappy-source-dir ${snappy_source_dir} --snappy-binary-dir ${snappy_binary_dir} --additional-patch-file ${additional_patch_file}
 
   HTTP_HEADER "${EXTERNAL_PROJECT_HTTP_HEADER}"
 )

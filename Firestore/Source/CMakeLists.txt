@@ -16,6 +16,10 @@ if(NOT APPLE)
   return()
 endif()
 
+if(NOT FIRESTORE_INCLUDE_OBJC)
+  return()
+endif()
+
 file(GLOB headers Public/FirebaseFirestore/*.h)
 file(GLOB sources API/*.h API/*.m API/*.mm)
 
@@ -24,6 +28,7 @@ firebase_ios_framework_public_headers(FirebaseFirestore ${headers})
 
 target_link_libraries(
   FirebaseFirestore PUBLIC
+  FirebaseAppCheckInterop
   FirebaseAuthInterop
   FirebaseCore
   absl_strings

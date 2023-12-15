@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'FirebaseFunctions'
-  s.version          = '8.10.0'
+  s.version          = '10.20.0'
   s.summary          = 'Cloud Functions for Firebase'
 
   s.description      = <<-DESC
@@ -8,65 +8,62 @@ Cloud Functions for Firebase.
                        DESC
 
   s.homepage         = 'https://developers.google.com/'
-  s.license          = { :type => 'Apache', :file => 'LICENSE' }
+  s.license          = { :type => 'Apache-2.0', :file => 'LICENSE' }
   s.authors          = 'Google, Inc.'
+
   s.source           = {
-    :git => 'https://github.com/firebase/firebase-ios-sdk.git',
+    :git => 'https://github.com/Firebase/firebase-ios-sdk.git',
     :tag => 'CocoaPods-' + s.version.to_s
   }
 
-  s.ios.deployment_target = '10.0'
-  s.osx.deployment_target = '10.12'
-  s.tvos.deployment_target = '10.0'
-  s.watchos.deployment_target = '6.0'
+  s.swift_version    = '5.3'
+
+  ios_deployment_target = '11.0'
+  osx_deployment_target = '10.13'
+  tvos_deployment_target = '12.0'
+  watchos_deployment_target = '6.0'
+
+  s.ios.deployment_target = ios_deployment_target
+  s.osx.deployment_target = osx_deployment_target
+  s.tvos.deployment_target = tvos_deployment_target
+  s.watchos.deployment_target = watchos_deployment_target
 
   s.cocoapods_version = '>= 1.4.0'
   s.prefix_header_file = false
 
+  s.swift_version = '5.3'
+
   s.source_files = [
-    'FirebaseFunctions/Sources/**/*',
-    'Interop/Auth/Public/*.h',
-    'FirebaseAppCheck/Sources/Interop/*.h',
-    'FirebaseCore/Sources/Private/*.h',
-    'FirebaseMessaging/Sources/Interop/FIRMessagingInterop.h',
+    'FirebaseFunctions/Sources/**/*.swift',
   ]
-  s.public_header_files = 'FirebaseFunctions/Sources/Public/FirebaseFunctions/*.h'
 
-  s.dependency 'FirebaseCore', '~> 8.0'
-  s.dependency 'GTMSessionFetcher/Core', '~> 1.5'
+  s.dependency 'FirebaseCore', '~> 10.0'
+  s.dependency 'FirebaseCoreExtension', '~> 10.0'
+  s.dependency 'FirebaseAppCheckInterop', '~> 10.10'
+  s.dependency 'FirebaseAuthInterop', '~> 10.0'
+  s.dependency 'FirebaseMessagingInterop', '~> 10.0'
+  s.dependency 'FirebaseSharedSwift', '~> 10.0'
+  s.dependency 'GTMSessionFetcher/Core', '>= 2.1', '< 4.0'
 
-  s.pod_target_xcconfig = {
-    'GCC_C_LANGUAGE_STANDARD' => 'c99',
-    'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}"'
-  }
-
-  s.test_spec 'unit' do |unit_tests|
-    unit_tests.scheme = { :code_coverage => true }
-    unit_tests.source_files = [
-      'FirebaseFunctions/Tests/Unit/*.[mh]',
-      'FirebaseFunctions/Tests/SwiftUnit/**/*',
-      'SharedTestUtilities/FIRAuthInteropFake*',
-      'SharedTestUtilities/FIRMessagingInteropFake*',
-      'SharedTestUtilities/AppCheckFake/*.[mh]',
-  ]
+  s.test_spec 'objc' do |objc_tests|
+    objc_tests.platforms = {
+      :ios => ios_deployment_target,
+      :osx => '10.15',
+      :tvos => tvos_deployment_target
+    }
+    objc_tests.source_files = [
+      'FirebaseFunctions/Tests/ObjCIntegration/ObjC*'
+    ]
+    objc_tests.requires_app_host = true
   end
 
   s.test_spec 'integration' do |int_tests|
-    int_tests.scheme = { :code_coverage => true }
-    int_tests.source_files = 'FirebaseFunctions/Tests/Integration/*.[mh]',
-                             'SharedTestUtilities/FIRAuthInteropFake*',
-                             'SharedTestUtilities/FIRMessagingInteropFake*'
+    int_tests.platforms = {
+      :ios => ios_deployment_target,
+      :osx => osx_deployment_target,
+      :tvos => tvos_deployment_target
+    }
+    int_tests.source_files = 'FirebaseFunctions/Tests/Integration/*.swift'
+    int_tests.requires_app_host = true
   end
-
-  #  Uncomment to use pod gen to run the Swift Integration tests. This can't be
-  #  committed because of the dependency on the unpublished FirebaseFunctionsTestingSupport.
-  #  Alternatively, use Swift Package Manager to run the swift integration tests locally.
-  #
-  #   s.test_spec 'swift-integration' do |swift_int|
-  #   swift_int.platforms = {:ios => '15.0', :osx => '12.0', :tvos => '15.0', :watchos => '8.0'}
-  #   swift_int.scheme = { :code_coverage => true }
-  #   swift_int.dependency 'FirebaseFunctionsTestingSupport'
-  #   swift_int.source_files = 'FirebaseFunctions/Tests/SwiftIntegration/*',
-  #                            'FirebaseTestingSupport/Functions/Sources/*'
-  # end
 end

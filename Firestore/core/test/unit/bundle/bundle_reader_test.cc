@@ -229,9 +229,12 @@ class BundleReaderTest : public ::testing::Test {
     value2.set_string_value("okok");
     ProtoValue value3;
     value3.set_null_value(google::protobuf::NULL_VALUE);
+    ProtoValue value4;
+    value4.mutable_array_value();
     document.mutable_fields()->insert({"\0\ud7ff\ue000\uffff\"", value1});
     document.mutable_fields()->insert({"\"(╯°□°）╯︵ ┻━┻\"", value2});
     document.mutable_fields()->insert({"nValue", value3});
+    document.mutable_fields()->insert({"emptyArray", value4});
 
     return document;
   }
@@ -325,6 +328,24 @@ class BundleReaderTest : public ::testing::Test {
  private:
   std::vector<std::string> elements_;
 };
+
+TEST_F(BundleReaderTest, ReadsEmptyBundle) {
+  ProtoBundleMetadata metadata;
+  metadata.set_id("bundle-1");
+  metadata.set_version(1);
+  metadata.set_total_documents(0);
+  metadata.mutable_create_time();  // No seconds/nanos
+  metadata.set_total_bytes(0);
+  ProtoBundleElement element;
+  *element.mutable_metadata() = metadata;
+
+  std::string metadata_str;
+  MessageToJsonString(element, &metadata_str);
+  std::string bundle = std::to_string(metadata_str.size()) + metadata_str;
+
+  BundleReader reader(bundle_serializer, ToByteStream(bundle));
+  VerifyFullBundleParsed(reader, "bundle-1", testutil::Version(0));
+}
 
 TEST_F(BundleReaderTest, ReadsQueryAndDocument) {
   AddNamedQuery(LimitQuery());

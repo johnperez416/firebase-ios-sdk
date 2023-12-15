@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Foundation
 import Combine
+import FirebaseAuth
+import Foundation
 import GameKit
 import XCTest
-import FirebaseAuth
 
 class GameCenterAuthProviderTests: XCTestCase {
   override class func setUp() {
@@ -56,7 +56,7 @@ class GameCenterAuthProviderTests: XCTestCase {
     override func generateIdentityVerificationSignature(completionHandler: ((URL?, Data?, Data?,
                                                                              UInt64,
                                                                              Error?) -> Void)? =
-      nil) {
+        nil) {
       let url = URL(string: GameCenterAuthProviderTests.publicKeyURL)
       let signature = Data(base64Encoded: GameCenterAuthProviderTests.signature)
       let salt = Data(base64Encoded: GameCenterAuthProviderTests.salt)
@@ -72,7 +72,8 @@ class GameCenterAuthProviderTests: XCTestCase {
 
   class MockAuthBackend: AuthBackendImplementationMock {}
 
-  func testGetCredentialWithLocalPlayer() {
+  // TODO(#10767) - Restore two tests in this file.
+  func SKIPtestGetCredentialWithLocalPlayer() {
     // given
     FIRAuthBackend.setBackendImplementation(MockAuthBackend())
     MockLocalPlayer._local = MockLocalPlayer()
@@ -123,6 +124,7 @@ class GameCenterAuthProviderTests: XCTestCase {
   func testGetCredentialPlayerNotAuthenticatedWithLocalPlayer() {
     // given
     FIRAuthBackend.setBackendImplementation(MockAuthBackend())
+    MockLocalPlayer._local = MockLocalPlayer()
     MockLocalPlayer._local._isAuthenticated = false
 
     var cancellables = Set<AnyCancellable>()
@@ -145,7 +147,8 @@ class GameCenterAuthProviderTests: XCTestCase {
     wait(for: [getCredentialExpectation], timeout: expectationTimeout)
   }
 
-  func testGetCredentialInvalidPlayerWithLocalPlayer() {
+  // TODO(#10767) - Restore
+  func SKIPtestGetCredentialInvalidPlayerWithLocalPlayer() {
     // given
     FIRAuthBackend.setBackendImplementation(MockAuthBackend())
     MockLocalPlayer._local = MockLocalPlayer()

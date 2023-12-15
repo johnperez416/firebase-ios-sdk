@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'FirebasePerformance'
-  s.version          = '8.10.0'
+  s.version          = '10.20.0'
   s.summary          = 'Firebase Performance'
 
   s.description      = <<-DESC
@@ -8,7 +8,7 @@ Firebase Performance library to measure performance of Mobile and Web Apps.
                        DESC
 
   s.homepage         = 'https://firebase.google.com'
-  s.license          = { :type => 'Apache', :file => 'LICENSE' }
+  s.license          = { :type => 'Apache-2.0', :file => 'LICENSE' }
   s.authors          = 'Google, Inc.'
 
   s.source           = {
@@ -17,8 +17,10 @@ Firebase Performance library to measure performance of Mobile and Web Apps.
   }
   s.social_media_url = 'https://twitter.com/Firebase'
 
-  ios_deployment_target = '10.0'
-  tvos_deployment_target = '10.0'
+  ios_deployment_target = '11.0'
+  tvos_deployment_target = '12.0'
+
+  s.swift_version = '5.3'
 
   s.ios.deployment_target = ios_deployment_target
   s.tvos.deployment_target = tvos_deployment_target
@@ -29,7 +31,7 @@ Firebase Performance library to measure performance of Mobile and Web Apps.
   base_dir = "FirebasePerformance/"
   s.source_files = [
     base_dir + 'Sources/**/*.[cmh]',
-    'FirebaseCore/Sources/Private/*.h',
+    'FirebaseCore/Extension/*.h',
     'FirebaseInstallations/Source/Library/Private/*.h',
     'FirebaseRemoteConfig/Sources/Private/*.h',
   ]
@@ -57,14 +59,15 @@ Firebase Performance library to measure performance of Mobile and Web Apps.
   s.ios.framework = 'CoreTelephony'
   s.framework = 'QuartzCore'
   s.framework = 'SystemConfiguration'
-  s.dependency 'FirebaseCore', '~> 8.0'
-  s.dependency 'FirebaseInstallations', '~> 8.0'
-  s.dependency 'FirebaseRemoteConfig', '~> 8.0'
-  s.dependency 'GoogleDataTransport', '~> 9.1'
-  s.dependency 'GoogleUtilities/Environment', '~> 7.6'
-  s.dependency 'GoogleUtilities/ISASwizzler', '~> 7.6'
-  s.dependency 'GoogleUtilities/MethodSwizzler', '~> 7.6'
-  s.dependency 'nanopb', '~> 2.30908.0'
+  s.dependency 'FirebaseCore', '~> 10.5'
+  s.dependency 'FirebaseInstallations', '~> 10.0'
+  s.dependency 'FirebaseRemoteConfig', '~> 10.0'
+  s.dependency 'FirebaseSessions', '~> 10.5'
+  s.dependency 'GoogleDataTransport', '~> 9.2'
+  s.dependency 'GoogleUtilities/Environment', '~> 7.8'
+  s.dependency 'GoogleUtilities/ISASwizzler', '~> 7.8'
+  s.dependency 'GoogleUtilities/MethodSwizzler', '~> 7.8'
+  s.dependency 'nanopb', '>= 2.30908.0', '< 2.30910.0'
 
   s.test_spec 'unit' do |unit_tests|
     unit_tests.platforms = {:ios => ios_deployment_target, :tvos => tvos_deployment_target}

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Copyright 2019 Google LLC
 #
@@ -14,15 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Converts github flavored markdown changelogs to release notes.
+"""Converts GitHub flavored markdown changelogs to release notes.
 """
 
 import argparse
 import re
 import subprocess
 import string
-
-import six
 
 NO_HEADING = 'PRODUCT HAS NO HEADING'
 
@@ -78,8 +76,8 @@ def main():
 
 
 def find_local_repo():
-  url = six.ensure_text(
-      subprocess.check_output(['git', 'config', '--get', 'remote.origin.url']))
+  url = subprocess.check_output(['git', 'config', '--get', 'remote.origin.url'],
+                                text=True, errors='replace')
 
   # ssh or https style URL
   m = re.match(r'^(?:git@github\.com:|https://github\.com/)(.*)\.git$', url)
@@ -149,8 +147,9 @@ class Renderer(object):
     """
     issue_link_list = []
     issue_list = issues.split(", ")
+    translate = str.maketrans('', '', string.punctuation)
     for issue in issue_list:
-      issue = issue.translate(None, string.punctuation)
+      issue = issue.translate(translate)
       link = '//github.com/%s/issues/%s' % (self.local_repo, issue)
       issue_link_list.append('[#%s](%s)' % (issue, link))
     return "(" + ", ".join(issue_link_list) + ")"

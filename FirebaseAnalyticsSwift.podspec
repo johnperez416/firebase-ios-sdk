@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name                    = 'FirebaseAnalyticsSwift'
-  s.version                 = '8.10.0-beta'
+  s.version                 = '10.19.0'
   s.summary                 = 'Swift Extensions for Firebase Analytics'
 
   s.description      = <<-DESC
@@ -8,7 +8,7 @@ Firebase Analytics is a free, out-of-the-box analytics solution that inspires ac
                        DESC
 
   s.homepage                = 'https://firebase.google.com/features/analytics/'
-  s.license                 = { :type => 'Apache', :file => 'LICENSE' }
+  s.license                 = { :type => 'Apache-2.0', :file => 'LICENSE' }
   s.authors                 = 'Google, Inc.'
 
   s.source                  = {
@@ -17,10 +17,15 @@ Firebase Analytics is a free, out-of-the-box analytics solution that inspires ac
   }
 
   s.static_framework        = true
-  s.swift_version           = '5.0'
-  s.ios.deployment_target   = '13.0'
-  s.osx.deployment_target   = '10.15'
-  s.tvos.deployment_target  = '13.0'
+  s.swift_version           = '5.3'
+
+  ios_deployment_target = '13.0'
+  osx_deployment_target = '10.15'
+  tvos_deployment_target = '13.0'
+
+  s.ios.deployment_target   = ios_deployment_target
+  s.osx.deployment_target   = osx_deployment_target
+  s.tvos.deployment_target  = tvos_deployment_target
 
   s.cocoapods_version       = '>= 1.10.0'
   s.prefix_header_file      = false
@@ -29,5 +34,27 @@ Firebase Analytics is a free, out-of-the-box analytics solution that inspires ac
     'FirebaseAnalyticsSwift/Sources/*.swift',
   ]
 
-  s.dependency 'FirebaseAnalytics', '~> 8.9'
+  s.dependency 'FirebaseAnalytics', '~> 10.17'
+
+  s.test_spec 'swift-unit' do |swift_unit_tests|
+    swift_unit_tests.platforms = {
+      :ios => ios_deployment_target,
+      :osx => osx_deployment_target,
+      :tvos => tvos_deployment_target
+    }
+    swift_unit_tests.source_files = [
+      'FirebaseAnalyticsSwift/Tests/SwiftUnit/**/*.swift',
+    ]
+  end
+
+  s.test_spec 'objc-api-coverage' do |objc_api_tests|
+    objc_api_tests.platforms = {
+      :ios => ios_deployment_target,
+      :osx => osx_deployment_target,
+      :tvos => tvos_deployment_target
+    }
+    objc_api_tests.source_files = [
+      'FirebaseAnalyticsSwift/Tests/ObjCAPI/*.[hm]',
+    ]
+  end
 end

@@ -253,36 +253,56 @@ func readDocument(at docRef: DocumentReference) {
       if let foo = document["foo"] {
         print("Field: \(foo)")
       }
-    } else {
-      // TODO(mikelehen): There may be a better way to do this, but it at least demonstrates
-      // the swift error domain / enum codes are renamed appropriately.
-      if let errorCode = error.flatMap({
-        ($0._domain == FirestoreErrorDomain) ? FirestoreErrorCode(rawValue: $0._code) : nil
-      }) {
+    } else if let error = error {
+      // New way to handle errors.
+      switch error {
+      case FirestoreErrorCode.unavailable:
+        print("Can't read document due to being offline!")
+      default:
+        print("Failed to read.")
+      }
+
+      // Old way to handle errors.
+      let nsError = error as NSError
+      guard nsError.domain == FirestoreErrorDomain else {
+        print("Unknown error!")
+        return
+      }
+
+      // Option 1: try to initialize the error code enum.
+      if let errorCode = FirestoreErrorCode.Code(rawValue: nsError.code) {
         switch errorCode {
         case .unavailable:
           print("Can't read document due to being offline!")
-        case _:
+        default:
           print("Failed to read.")
         }
-      } else {
-        print("Unknown error!")
       }
+
+      // Option 2: switch on the code and compare agianst raw values.
+      switch nsError.code {
+      case FirestoreErrorCode.unavailable.rawValue:
+        print("Can't read document due to being offline!")
+      default:
+        print("Failed to read.")
+      }
+    } else {
+      print("No error or document. Thanks, ObjC.")
     }
   }
 }
 
 func readDocumentWithSource(at docRef: DocumentReference) {
-  docRef.getDocument(source: FirestoreSource.default) { document, error in
+  docRef.getDocument(source: FirestoreSource.default) { _, _ in
   }
-  docRef.getDocument(source: .server) { document, error in
+  docRef.getDocument(source: .server) { _, _ in
   }
-  docRef.getDocument(source: FirestoreSource.cache) { document, error in
+  docRef.getDocument(source: FirestoreSource.cache) { _, _ in
   }
 }
 
 func readDocuments(matching query: Query) {
-  query.getDocuments { querySnapshot, error in
+  query.getDocuments { querySnapshot, _ in
     // TODO(mikelehen): Figure out how to make "for..in" syntax work
     // directly on documentSet.
     for document in querySnapshot!.documents {
@@ -292,11 +312,11 @@ func readDocuments(matching query: Query) {
 }
 
 func readDocumentsWithSource(matching query: Query) {
-  query.getDocuments(source: FirestoreSource.default) { querySnapshot, error in
+  query.getDocuments(source: FirestoreSource.default) { _, _ in
   }
-  query.getDocuments(source: .server) { querySnapshot, error in
+  query.getDocuments(source: .server) { _, _ in
   }
-  query.getDocuments(source: FirestoreSource.cache) { querySnapshot, error in
+  query.getDocuments(source: FirestoreSource.cache) { _, _ in
   }
 }
 
@@ -325,7 +345,7 @@ func listenToDocument(at docRef: DocumentReference) {
 }
 
 func listenToDocumentWithMetadataChanges(at docRef: DocumentReference) {
-  let listener = docRef.addSnapshotListener(includeMetadataChanges: true) { document, error in
+  let listener = docRef.addSnapshotListener(includeMetadataChanges: true) { document, _ in
     if let document = document {
       if document.metadata.hasPendingWrites {
         print("Has pending writes")
@@ -362,7 +382,7 @@ func listenToDocuments(matching query: Query) {
 }
 
 func listenToQueryDiffs(onQuery query: Query) {
-  let listener = query.addSnapshotListener { snap, error in
+  let listener = query.addSnapshotListener { snap, _ in
     if let snap = snap {
       for change in snap.documentChanges {
         switch change.type {
@@ -382,7 +402,7 @@ func listenToQueryDiffs(onQuery query: Query) {
 }
 
 func listenToQueryDiffsWithMetadata(onQuery query: Query) {
-  let listener = query.addSnapshotListener(includeMetadataChanges: true) { snap, error in
+  let listener = query.addSnapshotListener(includeMetadataChanges: true) { snap, _ in
     if let snap = snap {
       for change in snap.documentChanges(includeMetadataChanges: true) {
         switch change.type {
@@ -409,7 +429,7 @@ func transactions() {
   let accB = collectionRef.document("accountB")
   let amount = 20.0
 
-  db.runTransaction({ (transaction, errorPointer) -> Any? in
+  db.runTransaction({ transaction, errorPointer -> Any? in
     do {
       let balanceA = try transaction.getDocument(accA)["balance"] as! Double
       let balanceB = try transaction.getDocument(accB)["balance"] as! Double
@@ -424,7 +444,7 @@ func transactions() {
       print("Uh oh! \(error)")
     }
     return 0
-  }) { result, error in
+  }) { _, _ in
     // handle result.
   }
 }
@@ -472,3 +492,37 @@ func terminateDb(database db: Firestore) {
     }
   }
 }
+
+#if swift(>=5.5.2)
+  @available(iOS 13, tvOS 13, macOS 10.15, macCatalyst 13, watchOS 7, *)
+  func testAsyncAwait(database db: Firestore) async throws {
+    try await db.enableNetwork()
+    try await db.disableNetwork()
+    try await db.waitForPendingWrites()
+    try await db.clearPersistence()
+    try await db.terminate()
+    try await db.runTransaction { _, _ in
+      0
+    }
+
+    let batch = db.batch()
+    try await batch.commit()
+
+    _ = await db.getQuery(named: "foo")
+    _ = try await db.loadBundle(Data())
+
+    let collection = db.collection("coll")
+    try await collection.getDocuments()
+    try await collection.getDocuments(source: FirestoreSource.default)
+
+    let document = try await collection.addDocument(data: [:])
+
+    try await document.setData([:])
+    try await document.setData([:], merge: true)
+    try await document.setData([:], mergeFields: [])
+    try await document.updateData([:])
+    try await document.delete()
+    try await document.getDocument()
+    try await document.getDocument(source: FirestoreSource.default)
+  }
+#endif

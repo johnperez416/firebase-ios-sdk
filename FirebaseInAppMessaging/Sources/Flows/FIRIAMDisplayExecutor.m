@@ -15,16 +15,17 @@
  */
 
 #import <TargetConditionals.h>
-#if TARGET_OS_IOS || TARGET_OS_TV
+#if TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)
 
 #import <UIKit/UIKit.h>
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 
 #import "FirebaseInAppMessaging/Sources/FIRCore+InAppMessaging.h"
 #import "FirebaseInAppMessaging/Sources/Private/Data/FIRIAMMessageContentData.h"
 #import "FirebaseInAppMessaging/Sources/Private/Data/FIRIAMMessageDefinition.h"
 #import "FirebaseInAppMessaging/Sources/Private/Flows/FIRIAMActivityLogger.h"
 #import "FirebaseInAppMessaging/Sources/Private/Flows/FIRIAMDisplayExecutor.h"
+#import "FirebaseInAppMessaging/Sources/Private/Util/UIApplication+FIRForegroundWindowScene.h"
 #import "FirebaseInAppMessaging/Sources/Public/FirebaseInAppMessaging/FIRInAppMessaging.h"
 #import "FirebaseInAppMessaging/Sources/RenderingObjects/FIRInAppMessagingRenderingPrivate.h"
 #import "FirebaseInAppMessaging/Sources/Runtime/FIRIAMSDKRuntimeErrorCodes.h"
@@ -356,13 +357,8 @@
   dispatch_async(dispatch_get_main_queue(), ^{
 #if defined(__IPHONE_13_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000
     if (@available(iOS 13.0, tvOS 13.0, *)) {
-      UIWindowScene *foregroundedScene = nil;
-      for (UIWindowScene *connectedScene in [UIApplication sharedApplication].connectedScenes) {
-        if (connectedScene.activationState == UISceneActivationStateForegroundActive) {
-          foregroundedScene = connectedScene;
-          break;
-        }
-      }
+      UIWindowScene *foregroundedScene =
+          [[UIApplication sharedApplication] fir_foregroundWindowScene];
 
       if (foregroundedScene == nil) {
         return;
@@ -616,6 +612,8 @@
 - (void)displayForMessage:(FIRIAMMessageDefinition *)message
               triggerType:(FIRInAppMessagingDisplayTriggerType)triggerType {
   _currentMsgBeingDisplayed = message;
+  self.isMsgBeingDisplayed = YES;
+
   [message.renderData.contentData
       loadImageDataWithBlock:^(NSData *_Nullable standardImageRawData,
                                NSData *_Nullable landscapeImageRawData, NSError *_Nullable error) {
@@ -633,6 +631,7 @@
                                             triggerType:triggerType];
           // short-circuit to display error handling
           [self displayErrorForMessage:erroredMessage error:error];
+          self.isMsgBeingDisplayed = NO;
           return;
         } else {
           if (standardImageRawData) {
@@ -658,11 +657,11 @@
         if (self.suppressMessageDisplay) {
           FIRLogDebug(kFIRLoggerInAppMessaging, @"I-IAM400042",
                       @"Message display suppressed by developer at message display time.");
+          self.isMsgBeingDisplayed = NO;
           return;
         }
 
         self.impressionRecorded = NO;
-        self.isMsgBeingDisplayed = YES;
 
         FIRInAppMessagingDisplayMessage *displayMessage =
             [self displayMessageWithMessageDefinition:message
@@ -779,4 +778,4 @@
 }
 @end
 
-#endif  // TARGET_OS_IOS || TARGET_OS_TV
+#endif  // TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)

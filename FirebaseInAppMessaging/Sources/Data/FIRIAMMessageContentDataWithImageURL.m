@@ -15,9 +15,9 @@
  */
 
 #import <TargetConditionals.h>
-#if TARGET_OS_IOS || TARGET_OS_TV
+#if TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 
 #import "FirebaseInAppMessaging/Sources/FIRCore+InAppMessaging.h"
 #import "FirebaseInAppMessaging/Sources/Private/Data/FIRIAMMessageContentData.h"
@@ -27,7 +27,7 @@
 static NSInteger const SuccessHTTPStatusCode = 200;
 
 @interface FIRIAMMessageContentDataWithImageURL ()
-@property(nonatomic, readwrite, nonnull, copy) NSString *titleText;
+@property(nonatomic, readwrite, nullable, copy) NSString *titleText;
 @property(nonatomic, readwrite, nonnull, copy) NSString *bodyText;
 @property(nonatomic, copy, nullable) NSString *actionButtonText;
 @property(nonatomic, copy, nullable) NSString *secondaryActionButtonText;
@@ -39,8 +39,8 @@ static NSInteger const SuccessHTTPStatusCode = 200;
 @end
 
 @implementation FIRIAMMessageContentDataWithImageURL
-- (instancetype)initWithMessageTitle:(NSString *)title
-                         messageBody:(NSString *)body
+- (instancetype)initWithMessageTitle:(nullable NSString *)title
+                         messageBody:(nullable NSString *)body
                     actionButtonText:(nullable NSString *)actionButtonText
            secondaryActionButtonText:(nullable NSString *)secondaryActionButtonText
                            actionURL:(nullable NSURL *)actionURL
@@ -206,4 +206,4 @@ static NSInteger const SuccessHTTPStatusCode = 200;
 
 @end
 
-#endif  // TARGET_OS_IOS || TARGET_OS_TV
+#endif  // TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)

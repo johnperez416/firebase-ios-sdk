@@ -16,6 +16,8 @@
 
 #import <Foundation/Foundation.h>
 
+#import <FirebaseAppCheckInterop/FirebaseAppCheckInterop.h>
+
 @class FIRApp;
 @class FIRAppCheckToken;
 @protocol FIRAppCheckProviderFactory;
@@ -34,8 +36,9 @@ FOUNDATION_EXPORT NSString *const kFIRAppCheckTokenNotificationKey NS_SWIFT_NAME
 /// `userInfo` key for the `AppCheckToken` in `AppCheckTokenDidChangeNotification`.
 FOUNDATION_EXPORT NSString *const kFIRAppCheckAppNameNotificationKey NS_SWIFT_NAME(AppCheckAppNameNotificationKey);
 
+/// A class used to manage app check tokens for a given Firebase app.
 NS_SWIFT_NAME(AppCheck)
-@interface FIRAppCheck : NSObject
+@interface FIRAppCheck : NSObject <FIRAppCheckProtocol>
 
 - (instancetype)init NS_UNAVAILABLE;
 
@@ -47,23 +50,9 @@ NS_SWIFT_NAME(AppCheck)
 
 /// Returns an instance of `AppCheck` for an application.
 /// @param firebaseApp A configured `FirebaseApp` instance if exists.
-/// @returns An instance of `AppCheck` corresponding to the passed application.
+/// @return An instance of `AppCheck` corresponding to the passed application.
 /// @throw Throws an exception if required `FirebaseApp` options are missing.
 + (nullable instancetype)appCheckWithApp:(FIRApp *)firebaseApp NS_SWIFT_NAME(appCheck(app:));
-
-/// Requests Firebase app check token. This method should *only* be used if you need to authorize
-/// requests to a non-Firebase backend. Requests to Firebase backend are authorized automatically if
-/// configured.
-/// @param forcingRefresh If `YES`,  a new Firebase app check token is requested and the token
-/// cache is ignored. If `NO`, the cached token is used if it exists and has not expired yet. In
-/// most cases, `NO` should be used. `YES` should only be used if the server explicitly returns an
-/// error, indicating a revoked token.
-/// @param handler The completion handler. Includes the app check token if the request succeeds,
-/// or an error if the request fails.
-- (void)tokenForcingRefresh:(BOOL)forcingRefresh
-                 completion:
-                     (void (^)(FIRAppCheckToken *_Nullable token, NSError *_Nullable error))handler
-    NS_SWIFT_NAME(token(forcingRefresh:completion:));
 
 /// Sets the `AppCheckProviderFactory` to use to generate
 /// `AppCheckDebugProvider` objects.

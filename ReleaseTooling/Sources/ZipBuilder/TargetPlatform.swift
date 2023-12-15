@@ -34,25 +34,15 @@ enum TargetPlatform: CaseIterable {
   /// Valid architectures to be built for the platform.
   var archs: [Architecture] {
     switch self {
-    case .iOSDevice: return [.armv7, .arm64]
+    case .iOSDevice: return Included32BitIOS.include32 ? [.armv7, .arm64] : [.arm64]
     // Include arm64 slices in the simulator for Apple silicon Macs.
-    case .iOSSimulator: return [.i386, .x86_64, .arm64]
+    case .iOSSimulator: return Included32BitIOS
+      .include32 ? [.i386, .x86_64, .arm64] : [.x86_64, .arm64]
     // TODO: Evaluate x86_64h slice. Previous builds were limited to x86_64.
     case .catalyst: return [.x86_64, .arm64]
     case .macOS: return [.x86_64, .arm64]
     case .tvOSDevice: return [.arm64]
     case .tvOSSimulator: return [.x86_64, .arm64]
-    }
-  }
-
-  /// Flag to determine if bitcode should be used for the target platform.
-  var shouldEnableBitcode: Bool {
-    switch self {
-    // TODO: Do we need to include bitcode for Catalyst? We weren't before the latest arm64 changes.
-    case .iOSDevice: return true
-    case .macOS: return true
-    case .tvOSDevice: return true
-    default: return false
     }
   }
 
@@ -96,4 +86,11 @@ enum Architecture: String, CaseIterable {
   case i386
   case x86_64
   case x86_64h // x86_64h, Haswell, used for Mac Catalyst
+}
+
+enum Included32BitIOS {
+  fileprivate static var include32 = false
+  static func set() {
+    include32 = true
+  }
 }

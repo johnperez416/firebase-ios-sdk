@@ -1,6 +1,66 @@
+# 10.11.0
+- [added] Add progress tracking capability for `putDataAsync`, `putFileAsync`, and
+  `writeAsync`. (#10574)
+
+# 10.10.0
+- [fixed] Fixed potential memory leak of Storage instances. (#11248)
+
+# 10.7.0
+- [added] Provide server errors via the `NSUnderlyingErrorKey`.
+
+# 10.5.0
+- [added] Added Storage API to limit upload chunk size. (#10137)
+- [fixed] Run `pod update` or `File -> Packages -> Update to latest Packages` to update the `GTMSessionFetcher` dependency to at least version `3.1.0`.
+  This fixes an issue where it infinitely retries when FirebaseStorage returns a 500 response.
+
+# 10.3.0
+- [fixed] Use dedicated serial queue for Storage uploads and downloads instead of a (concurrent) global queue.
+  Fixes regression introduced in 10.0.0. (#10487)
+
+# 10.2.0
+- [fixed] Fixed an issue where using Storage with more than one FirebaseApp instance caused non-default Storage instances to deadlock (#10463).
+- [fixed] Fixed a race condition where a download size could exceed the value of the `maxSize` parameter. (#10358)
+
+# 10.1.0
+- [fixed] Fixed a 10.0.0 regression where metadata passed to `putFile` was not properly initialized. (#10353)
+- [fixed] Fixed a 10.0.0 regression handling an empty JSON metadata field from the emulator. (#10370)
+
+# 10.0.0
+- [changed] FirebaseStorage is now completely implemented in Swift. Swift-specific API improvements
+  are planned for subsequent releases. (#9963)
+- [added] New API `open func reference(for url: URL) throws -> StorageReference` equivalent to
+  `open func reference(forURL url: String) -> StorageReference` except it throws instead of
+  erroring. (#6974)
+- [changed] The `FirebaseStorageInternal` CocoaPod has been discontinued.
+- [changed] Deprecate the `storageReference` property of `StorageMetadata`. It had never been implemented
+  and always returned `nil`.
+- [changed] Storage APIs that previously threw an Objective-C exception now generate a Swift
+  `fatalError`.
+- [changed] Storage now requires at least version 2.1 of its GTMSessionFetcher dependency.
+- [changed] The localized description for `unknown` errors is now more descriptive.
+
+# 9.2.0
+- [fixed] Importing FirebaseStorage no longer exposes internal FirebaseCore APIs. (#9884)
+
+# 9.0.0
+- [changed] The FirebaseStorageSwift library has been removed. All of its APIs are now included
+  in the FirebaseStorage library. Please remove references to FirebaseStorageSwift from Podfiles and
+  Swift Package Manager configurations. `import FirebaseStorageSwift` should be replaced with
+  `import FirebaseStorage`.
+- [changed] Backported `StorageReference` async/await APIs to iOS 13, etc. (#9483).
+- [changed] The global variable `StorageErrorDomain` is restored for Swift only.
+
+# 8.15.0
+- [deprecated] The global variable `FIRStorageErrorDomain` is deprecated and will
+  be removed in a future release (#9569).
+
 # 8.5.0
 - [fixed] Fixed an issue where Storage could not connect to local emulators using
   http (#8389).
+- [added] Added four APIs to augment automatically generated `async/await` APIs. See
+  details via Xcode completion and at the
+  [source](https://github.com/firebase/firebase-ios-sdk/blob/96d60a6d472b6fed1651d5e7a0e7495230c220ec/FirebaseStorageSwift/Sources/AsyncAwait.swift).
+  Feedback appreciated about Firebase and `async/await`. (#8289)
 
 # 8.3.0
 - [changed] Removed usage of a deprecated GTMSessionFetcher method (#8294).
@@ -81,50 +141,50 @@
 # 3.0.2
 - [changed] Migrate to use FirebaseAuthInterop interfaces to access FirebaseAuth (#1660).
 
-# v3.0.1
+# 3.0.1
 - [fixed] Fixed potential `EXC_BAD_ACCESS` violation in the internal logic for processing finished downloads (#1565, #1747).
 
-# v3.0.0
+# 3.0.0
 - [removed] Removed `downloadURLs` property on `StorageMetadata`. Use `StorageReference.downloadURL(completion:)` to obtain a current download URL.
 - [changed] The `maxOperationRetryTime` timeout now applies to calls to `StorageReference.getMetadata(completion:)` and `StorageReference.updateMetadata(completion:)`. These calls previously used the `maxDownloadRetryTime` and `maxUploadRetryTime` timeouts.
 
-# v2.2.0
+# 2.2.0
 - [changed] Deprecated `downloadURLs` property on `StorageMetadata`. Use `StorageReference.downloadURL(completion:)` to obtain a current download URL.
 
-# v2.1.3
+# 2.1.3
 - [changed] Addresses CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF warnings that surface in newer versions of Xcode and CocoaPods.
 
-# v2.1.2
+# 2.1.2
 - [added] Firebase Storage is now community-supported on tvOS.
 
-# v2.1.1
+# 2.1.1
 - [changed] Internal cleanup in the firebase-ios-sdk repository. Functionality of the Storage SDK is not affected.
 
-# v2.1.0
+# 2.1.0
 - [added] Added 'md5Hash' to FIRStorageMetadata.
 
-# v2.0.2
+# 2.0.2
 - [changed] Custom FIRStorageMetadata can now be cleared by setting individual properties to 'nil'.
 
-# v2.0.1
+# 2.0.1
 - [fixed] Fixed crash in FIRStorageDownloadTask that was caused by invoking callbacks that where no longer active.
 - [changed] Added 'size' to the NSDictionary representation of FIRStorageMetadata.
 
-# v2.0.0
+# 2.0.0
 - [changed] Initial Open Source release.
 
-# v1.0.6
+# 1.0.6
 
 - [fixed] Fixed crash when user-provided callbacks were nil.
 - [changed] Improved upload performance under spotty connectivity.
 
-# v1.0.5
+# 1.0.5
 
 - [fixed] Snapshot data is now always from the requested snapshot, rather than
   the most recent snapshot.
 - [fixed] Fixed an issue with downloads that were not properly pausing.
 
-# v1.0.4
+# 1.0.4
 
 - [fixed] Fixed an issue causing us to not respect the developer-specified
   timeouts for initial up- and download requests.

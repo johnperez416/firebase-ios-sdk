@@ -17,7 +17,7 @@
 #import <OCMock/OCMock.h>
 #import <XCTest/XCTest.h>
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 #import "FirebaseRemoteConfig/Sources/Private/FIRRemoteConfig_Private.h"
 #import "FirebaseRemoteConfig/Sources/Private/RCNConfigFetch.h"
 #import "FirebaseRemoteConfig/Sources/RCNConfigConstants.h"
@@ -29,11 +29,14 @@
 
 @interface RCNConfigFetch (ForTest)
 - (NSURLSessionDataTask *)URLSessionDataTaskWithContent:(NSData *)content
+                                        fetchTypeHeader:(NSString *)fetchTypeHeader
                                       completionHandler:
                                           (RCNConfigFetcherCompletion)fetcherCompletion;
 
 - (void)fetchWithUserProperties:(NSDictionary *)userProperties
-              completionHandler:(FIRRemoteConfigFetchCompletion)completionHandler;
+                fetchTypeHeader:(NSString *)fetchTypeHeader
+              completionHandler:(FIRRemoteConfigFetchCompletion)completionHandler
+        updateCompletionHandler:(RCNConfigFetchCompletion)updateCompletionHandler;
 @end
 
 @interface RCNPersonalizationTest : XCTestCase {
@@ -243,10 +246,14 @@
       .andDo(^(NSInvocation *invocation) {
         __unsafe_unretained FIRRemoteConfigFetchCompletion handler;
         [invocation getArgument:&handler atIndex:3];
-        [configFetch fetchWithUserProperties:[[NSDictionary alloc] init] completionHandler:handler];
+        [configFetch fetchWithUserProperties:[[NSDictionary alloc] init]
+                             fetchTypeHeader:@"Base/1"
+                           completionHandler:handler
+                     updateCompletionHandler:nil];
       });
   OCMExpect([configFetch
                 URLSessionDataTaskWithContent:[OCMArg any]
+                              fetchTypeHeader:@"Base/1"
                             completionHandler:[RCNPersonalizationTest mockResponseHandler]])
       .andReturn(nil);
   return configFetch;

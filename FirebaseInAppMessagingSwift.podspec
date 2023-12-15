@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name                    = 'FirebaseInAppMessagingSwift'
-  s.version                 = '8.10.0-beta'
+  s.version                 = '10.19.0-beta'
   s.summary                 = 'Swift Extensions for Firebase In-App Messaging'
 
   s.description      = <<-DESC
@@ -9,7 +9,7 @@ See more product details at https://firebase.google.com/products/in-app-messagin
                        DESC
 
   s.homepage                = 'https://developers.google.com/'
-  s.license                 = { :type => 'Apache', :file => 'LICENSE' }
+  s.license                 = { :type => 'Apache-2.0', :file => 'LICENSE' }
   s.authors                 = 'Google, Inc.'
 
   s.source                  = {
@@ -24,7 +24,7 @@ See more product details at https://firebase.google.com/products/in-app-messagin
   s.prefix_header_file      = false
 
   s.source_files = [
-    'FirebaseInAppMessaging/Swift/Source/**/*.swift',
+    'FirebaseInAppMessagingSwift/Sources/**/*.swift',
   ]
 
   s.test_spec 'unit' do |unit_tests|
@@ -35,5 +35,5 @@ See more product details at https://firebase.google.com/products/in-app-messagin
 
   s.framework = 'UIKit'
 
-  s.dependency 'FirebaseInAppMessaging', '~> 8.0-beta'
+  s.dependency 'FirebaseInAppMessaging', '~> 10.17-beta'
 end

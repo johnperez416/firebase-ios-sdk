@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Foundation
 import Combine
-import XCTest
 import FirebaseAuth
+import Foundation
+import XCTest
 
 class SignInWithGameCenterTests: XCTestCase {
   override class func setUp() {
@@ -43,6 +43,8 @@ class SignInWithGameCenterTests: XCTestCase {
   fileprivate static let localID = "LOCALID"
   fileprivate static let playerIDKey = "playerId"
   fileprivate static let playerID = "PLAYERID"
+  fileprivate static let teamPlayerID = "TEAMPLAYERID"
+  fileprivate static let gamePlayerID = "GAMEPLAYERID"
   fileprivate static let approximateExpirationDateKey = "expiresIn"
   fileprivate static let approximateExpirationDate = "3600"
   fileprivate static let isNewUserKey = "isNewUser"
@@ -67,7 +69,7 @@ class SignInWithGameCenterTests: XCTestCase {
     var contentType: String?
     var handler: FIRAuthBackendRPCIssuerCompletionHandler?
 
-    func asyncPostToURL(with requestConfiguration: FIRAuthRequestConfiguration, url URL: URL,
+    func asyncCallToURL(with requestConfiguration: FIRAuthRequestConfiguration, url URL: URL,
                         body: Data?, contentType: String,
                         completionHandler handler: @escaping FIRAuthBackendRPCIssuerCompletionHandler) {
       requestURL = URL
@@ -110,6 +112,8 @@ class SignInWithGameCenterTests: XCTestCase {
 
     let request = FIRSignInWithGameCenterRequest(
       playerID: Self.playerID,
+      teamPlayerID: Self.teamPlayerID,
+      gamePlayerID: Self.gamePlayerID,
       publicKeyURL: URL(string: Self.publicKeyURL)!,
       signature: signature,
       salt: salt,

@@ -16,7 +16,7 @@
 
 #import "FirebaseDatabase/Tests/Integration/FData.h"
 #import <limits.h>
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 #import "FirebaseDatabase/Sources/Api/Private/FIRDatabaseQuery_Private.h"
 #import "FirebaseDatabase/Sources/Core/FRepo_Private.h"
 #import "FirebaseDatabase/Sources/FIRDatabaseConfig_Private.h"
@@ -328,7 +328,8 @@ This test flakes frequently on the emulator on travis and almost always on GHA w
                        "already finished." /
                   Users / runner / runners / 2.262.1 / work / firebase -
               ios - sdk / firebase - ios -
-              sdk / Example / Database / Tests / Helpers / FEventTester.m : 123
+              sdk / Example / Database / Tests / Helpers / FEventTester.m:
+123
 ``` FTupleEventTypeString *recvd = [self.actualPathsAndEvents objectAtIndex:i];
 XCTAssertTrue([target isEqualTo:recvd], @"Expected %@ to match %@", target, recvd);
 

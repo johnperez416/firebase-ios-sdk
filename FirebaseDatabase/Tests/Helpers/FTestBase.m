@@ -14,19 +14,28 @@
  * limitations under the License.
  */
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 
 #import "FirebaseDatabase/Sources/Api/Private/FIRDatabaseQuery_Private.h"
-#import "FirebaseDatabase/Tests/Helpers/FTestAuthTokenGenerator.h"
 #import "FirebaseDatabase/Tests/Helpers/FTestBase.h"
 #import "SharedTestUtilities/FIROptionsMock.h"
+
+@interface FIROptions (Testing)
++ (NSString *)plistFilePathWithName:(NSString *)fileName;
+@end
 
 @implementation FTestBase
 
 + (void)setUp {
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    [FIROptionsMock mockFIROptions];
+    if ([FIROptions plistFilePathWithName:@"GoogleService-Info"] == nil) {
+      // Mock options for unit tests and emulator runs.
+      // To run the integration tests with a real GoogleService-Info.plist, add the
+      // GoogleService-Info.plist file to the AppHost-FirebaseDatabase-Unit-Tests generated target
+      // in the Pods project created by `pod gen`.
+      [FIROptionsMock mockFIROptions];
+    }
     [FIRApp configure];
   });
 }

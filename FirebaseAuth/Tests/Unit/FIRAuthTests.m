@@ -19,6 +19,7 @@
 #import <XCTest/XCTest.h>
 
 #import <GoogleUtilities/GULAppDelegateSwizzler.h>
+#import "FirebaseAuth/Interop/FIRAuthInterop.h"
 #import "FirebaseAuth/Sources/Public/FirebaseAuth/FIRActionCodeSettings.h"
 #import "FirebaseAuth/Sources/Public/FirebaseAuth/FIRAdditionalUserInfo.h"
 #import "FirebaseAuth/Sources/Public/FirebaseAuth/FIRAuthSettings.h"
@@ -26,8 +27,7 @@
 #import "FirebaseAuth/Sources/Public/FirebaseAuth/FIRFacebookAuthProvider.h"
 #import "FirebaseAuth/Sources/Public/FirebaseAuth/FIRGoogleAuthProvider.h"
 #import "FirebaseAuth/Sources/Public/FirebaseAuth/FIROAuthProvider.h"
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
-#import "Interop/Auth/Public/FIRAuthInterop.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 
 #import "FirebaseAuth/Sources/Auth/FIRAuthDispatcher.h"
 #import "FirebaseAuth/Sources/Auth/FIRAuthGlobalWorkQueue.h"
@@ -45,6 +45,8 @@
 #import "FirebaseAuth/Sources/Backend/RPC/FIRGetOOBConfirmationCodeResponse.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRResetPasswordRequest.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRResetPasswordResponse.h"
+#import "FirebaseAuth/Sources/Backend/RPC/FIRRevokeTokenRequest.h"
+#import "FirebaseAuth/Sources/Backend/RPC/FIRRevokeTokenResponse.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRSecureTokenRequest.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRSecureTokenResponse.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRSetAccountInfoRequest.h"
@@ -61,6 +63,7 @@
 #import "FirebaseAuth/Sources/Backend/RPC/FIRVerifyPhoneNumberResponse.h"
 #import "FirebaseAuth/Sources/User/FIRUser_Internal.h"
 #import "FirebaseAuth/Sources/Utilities/FIRAuthErrorUtils.h"
+#import "FirebaseAuth/Sources/Utilities/FIRAuthRecaptchaVerifier.h"
 #import "FirebaseAuth/Tests/Unit/FIRApp+FIRAuthUnitTests.h"
 #import "FirebaseAuth/Tests/Unit/OCMStubRecorder+FIRAuthUnitTests.h"
 
@@ -135,6 +138,21 @@ static NSString *const kLocalID = @"LOCAL_ID";
  */
 static NSString *const kDisplayName = @"User Doe";
 
+/** @var kIDToken
+    @brief The fake id token.
+ */
+static NSString *const kIDToken = @"IDToken";
+
+/** @var kFakeGivenName
+    @brief The fake user given name.
+ */
+static NSString *const kFakeGivenName = @"Firstname";
+
+/** @var kFakeFamilyName
+    @brief The fake user family name.
+ */
+static NSString *const kFakeFamilyName = @"Lastname";
+
 /** @var kGoogleUD
     @brief The fake user ID under Google Sign-In.
  */
@@ -159,6 +177,16 @@ static NSString *const kGoogleAccessToken = @"GOOGLE_ACCESS_TOKEN";
     @brief The fake ID token from Google Sign-In.
  */
 static NSString *const kGoogleIDToken = @"GOOGLE_ID_TOKEN";
+
+/** @var kAppleAuthProviderID
+    @brief The provider ID for Apple Sign-In.
+ */
+static NSString *const kAppleAuthProviderID = @"apple.com";
+
+/** @var kAppleIDToken
+    @brief The fake ID token from Apple Sign-In.
+ */
+static NSString *const kAppleIDToken = @"APPLE_ID_TOKEN";
 
 /** @var kCustomToken
     @brief The fake custom token to sign in.
@@ -244,6 +272,16 @@ static const NSTimeInterval kExpectationTimeout = 2;
     @brief The time waiting for background tasks to finish before continue when necessary.
  */
 static const NSTimeInterval kWaitInterval = .5;
+
+/** @var kFakeRecaptchaResponse
+    @brief The fake recaptcha response.
+ */
+static NSString *const kFakeRecaptchaResponse = @"RecaptchaResponse";
+
+/** @var kFakeRecaptchaVersion
+    @brief The fake recaptcha version.
+ */
+static NSString *const kFakeRecaptchaVersion = @"RecaptchaVersion";
 
 #if TARGET_OS_IOS
 /** @class FIRAuthAppDelegate
@@ -395,6 +433,8 @@ static const NSTimeInterval kWaitInterval = .5;
             });
           });
   XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   [[FIRAuth auth] fetchSignInMethodsForEmail:kEmail
                                   completion:^(NSArray<NSString *> *_Nullable signInMethods,
                                                NSError *_Nullable error) {
@@ -404,6 +444,7 @@ static const NSTimeInterval kWaitInterval = .5;
                                     XCTAssertNil(error);
                                     [expectation fulfill];
                                   }];
+#pragma clang diagnostic pop
   [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
   OCMVerifyAll(_mockBackend);
 }
@@ -415,6 +456,8 @@ static const NSTimeInterval kWaitInterval = .5;
   OCMExpect([_mockBackend createAuthURI:[OCMArg any] callback:[OCMArg any]])
       .andDispatchError2([FIRAuthErrorUtils tooManyRequestsErrorWithMessage:nil]);
   XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   [[FIRAuth auth] fetchSignInMethodsForEmail:kEmail
                                   completion:^(NSArray<NSString *> *_Nullable signInMethods,
                                                NSError *_Nullable error) {
@@ -424,6 +467,7 @@ static const NSTimeInterval kWaitInterval = .5;
                                     XCTAssertNotNil(error.userInfo[NSLocalizedDescriptionKey]);
                                     [expectation fulfill];
                                   }];
+#pragma clang diagnostic pop
   [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
   OCMVerifyAll(_mockBackend);
 }
@@ -606,6 +650,123 @@ static const NSTimeInterval kWaitInterval = .5;
   [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
   OCMVerifyAll(_mockBackend);
 }
+
+#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
+/** @fn testSignInWithEmailPasswordWithRecaptchaSuccess
+    @brief Tests the flow of a successful @c signInWithEmail:password:completion: call.
+ */
+- (void)testSignInWithEmailPasswordWithRecaptchaSuccess {
+  id mockVerifier = OCMClassMock([FIRAuthRecaptchaVerifier class]);
+  OCMStub([mockVerifier sharedRecaptchaVerifier:[FIRAuth auth]]).andReturn(mockVerifier);
+  OCMExpect([mockVerifier enablementStatusForProvider:FIRAuthRecaptchaProviderPassword])
+      .andReturn(YES);
+  FIRVerifyPasswordRequest *constRequestWithRecaptchaToken =
+      [[FIRVerifyPasswordRequest alloc] initWithEmail:kEmail
+                                             password:kFakePassword
+                                 requestConfiguration:[FIRAuth auth].requestConfiguration];
+  [constRequestWithRecaptchaToken injectRecaptchaFields:kFakeRecaptchaResponse
+                                       recaptchaVersion:kFakeRecaptchaVersion];
+  OCMStub([mockVerifier
+      injectRecaptchaFields:[OCMArg any]
+                   provider:FIRAuthRecaptchaProviderPassword
+                     action:FIRAuthRecaptchaActionSignInWithPassword
+                 completion:([OCMArg invokeBlockWithArgs:constRequestWithRecaptchaToken, nil])]);
+  OCMExpect([_mockBackend verifyPassword:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRVerifyPasswordRequest *_Nullable request,
+                       FIRVerifyPasswordResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.password, kFakePassword);
+        XCTAssertTrue(request.returnSecureToken);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          id mockVerifyPasswordResponse = OCMClassMock([FIRVerifyPasswordResponse class]);
+          [self stubTokensWithMockResponse:mockVerifyPasswordResponse];
+          callback(mockVerifyPasswordResponse, nil);
+        });
+      });
+  [self expectGetAccountInfo];
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] signOut:NULL];
+  [[FIRAuth auth] signInWithEmail:kEmail
+                         password:kFakePassword
+                       completion:^(FIRAuthDataResult *_Nullable result, NSError *_Nullable error) {
+                         XCTAssertTrue([NSThread isMainThread]);
+                         [self assertUser:result.user];
+                         XCTAssertNil(error);
+                         [expectation fulfill];
+                       }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  [self assertUser:[FIRAuth auth].currentUser];
+}
+
+/** @fn testSignInWithEmailPasswordWithRecaptchaFallbackSuccess
+    @brief Tests the flow of a successful @c signInWithEmail:password:completion: call.
+ */
+- (void)testSignInWithEmailPasswordWithRecaptchaFallbackSuccess {
+  id mockVerifier = OCMClassMock([FIRAuthRecaptchaVerifier class]);
+  OCMStub([mockVerifier sharedRecaptchaVerifier:[FIRAuth auth]]).andReturn(mockVerifier);
+  OCMExpect([mockVerifier enablementStatusForProvider:FIRAuthRecaptchaProviderPassword])
+      .andReturn(NO);
+  FIRVerifyPasswordRequest *constRequestWithRecaptchaToken =
+      [[FIRVerifyPasswordRequest alloc] initWithEmail:kEmail
+                                             password:kFakePassword
+                                 requestConfiguration:[FIRAuth auth].requestConfiguration];
+  [constRequestWithRecaptchaToken injectRecaptchaFields:kFakeRecaptchaResponse
+                                       recaptchaVersion:kFakeRecaptchaVersion];
+  OCMStub([mockVerifier
+      injectRecaptchaFields:[OCMArg any]
+                   provider:FIRAuthRecaptchaProviderPassword
+                     action:FIRAuthRecaptchaActionSignInWithPassword
+                 completion:([OCMArg invokeBlockWithArgs:constRequestWithRecaptchaToken, nil])]);
+  OCMExpect([_mockBackend verifyPassword:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRVerifyPasswordRequest *_Nullable request,
+                       FIRVerifyPasswordResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.password, kFakePassword);
+        XCTAssertTrue(request.returnSecureToken);
+        NSError *underlyingError =
+            [[NSError alloc] initWithDomain:FIRAuthErrorDomain
+                                       code:FIRAuthErrorCodeInternalError
+                                   userInfo:@{
+                                     FIRAuthErrorUserInfoDeserializedResponseKey :
+                                         @{@"message" : @"MISSING_RECAPTCHA_TOKEN"}
+                                   }];
+        NSError *error = [[NSError alloc] initWithDomain:FIRAuthErrorDomain
+                                                    code:FIRAuthErrorCodeInternalError
+                                                userInfo:@{NSUnderlyingErrorKey : underlyingError}];
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          callback(nil, error);
+        });
+      });
+  OCMExpect([_mockBackend verifyPassword:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRVerifyPasswordRequest *_Nullable request,
+                       FIRVerifyPasswordResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.password, kFakePassword);
+        XCTAssertTrue(request.returnSecureToken);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          id mockVerifyPasswordResponse = OCMClassMock([FIRVerifyPasswordResponse class]);
+          [self stubTokensWithMockResponse:mockVerifyPasswordResponse];
+          callback(mockVerifyPasswordResponse, nil);
+        });
+      });
+  [self expectGetAccountInfo];
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] signOut:NULL];
+  [[FIRAuth auth] signInWithEmail:kEmail
+                         password:kFakePassword
+                       completion:^(FIRAuthDataResult *_Nullable result, NSError *_Nullable error) {
+                         XCTAssertTrue([NSThread isMainThread]);
+                         [self assertUser:result.user];
+                         XCTAssertNil(error);
+                         [expectation fulfill];
+                       }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  [self assertUser:[FIRAuth auth].currentUser];
+}
+#endif
 
 /** @fn testSignInWithEmailPasswordSuccess
     @brief Tests the flow of a successful @c signInWithEmail:password:completion: call.
@@ -1374,6 +1535,66 @@ static const NSTimeInterval kWaitInterval = .5;
   OCMVerifyAll(_mockBackend);
 }
 
+/** @fn testSignInWithAppleCredentialFullNameInRequest
+    @brief Tests the flow of a successful @c signInWithCredential:completion: call
+        with an Apple Sign-In credential with a full name. This test differentiates from
+        @c testSignInWithCredentialSuccess only in verifying the full name.
+ */
+- (void)testSignInWithAppleCredentialFullNameInRequestSuccess {
+  NSPersonNameComponents *fullName = [[NSPersonNameComponents alloc] init];
+  fullName.givenName = kFakeGivenName;
+  fullName.familyName = kFakeFamilyName;
+  OCMExpect([_mockBackend verifyAssertion:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRVerifyAssertionRequest *_Nullable request,
+                       FIRVerifyAssertionResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.providerID, kAppleAuthProviderID);
+        XCTAssertEqualObjects(request.providerIDToken, kAppleIDToken);
+        // Verify that the full name is passed to the backend request.
+        XCTAssertEqualObjects(request.fullName, fullName);
+        XCTAssertTrue(request.returnSecureToken);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          id mockVerifyAssertionResponse = OCMClassMock([FIRVerifyAssertionResponse class]);
+          OCMStub([mockVerifyAssertionResponse providerID]).andReturn(kAppleAuthProviderID);
+          [self stubTokensWithMockResponse:mockVerifyAssertionResponse];
+          callback(mockVerifyAssertionResponse, nil);
+        });
+      });
+  OCMExpect([_mockBackend getAccountInfo:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRGetAccountInfoRequest *_Nullable request,
+                       FIRGetAccountInfoResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.accessToken, kAccessToken);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          id mockAppleUserInfo = OCMClassMock([FIRGetAccountInfoResponseProviderUserInfo class]);
+          OCMStub([mockAppleUserInfo providerID]).andReturn(kAppleAuthProviderID);
+          id mockGetAccountInfoResponseUser = OCMClassMock([FIRGetAccountInfoResponseUser class]);
+          OCMStub([mockGetAccountInfoResponseUser providerUserInfo])
+              .andReturn((@[ mockAppleUserInfo ]));
+          id mockGetAccountInfoResponse = OCMClassMock([FIRGetAccountInfoResponse class]);
+          OCMStub([mockGetAccountInfoResponse users]).andReturn(@[
+            mockGetAccountInfoResponseUser
+          ]);
+          callback(mockGetAccountInfoResponse, nil);
+        });
+      });
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] signOut:NULL];
+  FIRAuthCredential *appleCredential = [FIROAuthProvider appleCredentialWithIDToken:kAppleIDToken
+                                                                           rawNonce:nil
+                                                                           fullName:fullName];
+  [[FIRAuth auth]
+      signInWithCredential:appleCredential
+                completion:^(FIRAuthDataResult *_Nullable authResult, NSError *_Nullable error) {
+                  XCTAssertTrue([NSThread isMainThread]);
+                  XCTAssertNil(error);
+                  [expectation fulfill];
+                }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  XCTAssertNotNil([FIRAuth auth].currentUser);
+  OCMVerifyAll(_mockBackend);
+}
+
 /** @fn testSignInAnonymouslySuccess
     @brief Tests the flow of a successful @c signInAnonymouslyWithCompletion: call.
  */
@@ -1595,6 +1816,129 @@ static const NSTimeInterval kWaitInterval = .5;
   OCMVerifyAll(_mockBackend);
 }
 
+#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
+/** @fn testCreateUserWithEmailPasswordWithRecaptchaVerificationSuccess
+    @brief Tests the flow of a successful @c createUserWithEmail:password:completion: call.
+ */
+- (void)testCreateUserWithEmailPasswordWithRecaptchaVerificationSuccess {
+  id mockVerifier = OCMClassMock([FIRAuthRecaptchaVerifier class]);
+  OCMStub([mockVerifier sharedRecaptchaVerifier:[FIRAuth auth]]).andReturn(mockVerifier);
+  OCMExpect([mockVerifier enablementStatusForProvider:FIRAuthRecaptchaProviderPassword])
+      .andReturn(YES);
+  FIRSignUpNewUserRequest *constRequestWithRecaptchaToken =
+      [[FIRSignUpNewUserRequest alloc] initWithEmail:kEmail
+                                            password:kFakePassword
+                                         displayName:kDisplayName
+                                             idToken:kIDToken
+                                requestConfiguration:[FIRAuth auth].requestConfiguration];
+  [constRequestWithRecaptchaToken injectRecaptchaFields:kFakeRecaptchaResponse
+                                       recaptchaVersion:kFakeRecaptchaVersion];
+  OCMStub([mockVerifier
+      injectRecaptchaFields:[OCMArg any]
+                   provider:FIRAuthRecaptchaProviderPassword
+                     action:FIRAuthRecaptchaActionSignUpPassword
+                 completion:([OCMArg invokeBlockWithArgs:constRequestWithRecaptchaToken, nil])]);
+  OCMExpect([_mockBackend signUpNewUser:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(
+          ^(FIRSignUpNewUserRequest *_Nullable request, FIRSignupNewUserCallback callback) {
+            XCTAssertEqualObjects(request.APIKey, kAPIKey);
+            XCTAssertEqualObjects(request.email, kEmail);
+            XCTAssertEqualObjects(request.password, kFakePassword);
+            XCTAssertTrue(request.returnSecureToken);
+            dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+              id mockSignUpNewUserResponse = OCMClassMock([FIRSignUpNewUserResponse class]);
+              [self stubTokensWithMockResponse:mockSignUpNewUserResponse];
+              callback(mockSignUpNewUserResponse, nil);
+            });
+          });
+  [self expectGetAccountInfo];
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] signOut:NULL];
+  [[FIRAuth auth]
+      createUserWithEmail:kEmail
+                 password:kFakePassword
+               completion:^(FIRAuthDataResult *_Nullable result, NSError *_Nullable error) {
+                 XCTAssertTrue([NSThread isMainThread]);
+                 [self assertUser:result.user];
+                 XCTAssertNil(error);
+                 [expectation fulfill];
+               }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  [self assertUser:[FIRAuth auth].currentUser];
+}
+
+/** @fn testCreateUserWithEmailPasswordWithRecaptchaFallbackSuccess
+    @brief Tests the flow of a successful @c createUserWithEmail:password:completion: call.
+ */
+- (void)testCreateUserWithEmailPasswordWithRecaptchaFallbackSuccess {
+  id mockVerifier = OCMClassMock([FIRAuthRecaptchaVerifier class]);
+  OCMStub([mockVerifier sharedRecaptchaVerifier:[FIRAuth auth]]).andReturn(mockVerifier);
+  OCMExpect([mockVerifier enablementStatusForProvider:FIRAuthRecaptchaProviderPassword])
+      .andReturn(NO);
+  FIRSignUpNewUserRequest *constRequestWithRecaptchaToken =
+      [[FIRSignUpNewUserRequest alloc] initWithEmail:kEmail
+                                            password:kFakePassword
+                                         displayName:kDisplayName
+                                             idToken:kIDToken
+                                requestConfiguration:[FIRAuth auth].requestConfiguration];
+  [constRequestWithRecaptchaToken injectRecaptchaFields:kFakeRecaptchaResponse
+                                       recaptchaVersion:kFakeRecaptchaVersion];
+  OCMStub([mockVerifier
+      injectRecaptchaFields:[OCMArg any]
+                   provider:FIRAuthRecaptchaProviderPassword
+                     action:FIRAuthRecaptchaActionSignUpPassword
+                 completion:([OCMArg invokeBlockWithArgs:constRequestWithRecaptchaToken, nil])]);
+  OCMExpect([_mockBackend signUpNewUser:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRSignUpNewUserRequest *_Nullable request,
+                       FIRSignupNewUserCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.password, kFakePassword);
+        XCTAssertTrue(request.returnSecureToken);
+        NSError *underlyingError =
+            [[NSError alloc] initWithDomain:FIRAuthErrorDomain
+                                       code:FIRAuthErrorCodeInternalError
+                                   userInfo:@{
+                                     FIRAuthErrorUserInfoDeserializedResponseKey :
+                                         @{@"message" : @"MISSING_RECAPTCHA_TOKEN"}
+                                   }];
+        NSError *error = [[NSError alloc] initWithDomain:FIRAuthErrorDomain
+                                                    code:FIRAuthErrorCodeInternalError
+                                                userInfo:@{NSUnderlyingErrorKey : underlyingError}];
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          callback(nil, error);
+        });
+      });
+  OCMExpect([_mockBackend signUpNewUser:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(
+          ^(FIRSignUpNewUserRequest *_Nullable request, FIRSignupNewUserCallback callback) {
+            XCTAssertEqualObjects(request.APIKey, kAPIKey);
+            XCTAssertEqualObjects(request.email, kEmail);
+            XCTAssertEqualObjects(request.password, kFakePassword);
+            XCTAssertTrue(request.returnSecureToken);
+            dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+              id mockSignUpNewUserResponse = OCMClassMock([FIRSignUpNewUserResponse class]);
+              [self stubTokensWithMockResponse:mockSignUpNewUserResponse];
+              callback(mockSignUpNewUserResponse, nil);
+            });
+          });
+  [self expectGetAccountInfo];
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] signOut:NULL];
+  [[FIRAuth auth]
+      createUserWithEmail:kEmail
+                 password:kFakePassword
+               completion:^(FIRAuthDataResult *_Nullable result, NSError *_Nullable error) {
+                 XCTAssertTrue([NSThread isMainThread]);
+                 [self assertUser:result.user];
+                 XCTAssertNil(error);
+                 [expectation fulfill];
+               }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  [self assertUser:[FIRAuth auth].currentUser];
+}
+#endif
+
 /** @fn testCreateUserWithEmailPasswordSuccess
     @brief Tests the flow of a successful @c createUserWithEmail:password:completion: call.
  */
@@ -1754,6 +2098,105 @@ static const NSTimeInterval kWaitInterval = .5;
   [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
 }
 
+#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
+/** @fn testSendPasswordResetEmailWithRecaptchaSuccess
+    @brief Tests the flow of a successful @c sendPasswordResetWithEmail:completion: call.
+ */
+- (void)testSendPasswordResetEmailWithRecaptchaSuccess {
+  id mockVerifier = OCMClassMock([FIRAuthRecaptchaVerifier class]);
+  OCMStub([mockVerifier sharedRecaptchaVerifier:[FIRAuth auth]]).andReturn(mockVerifier);
+  OCMExpect([mockVerifier enablementStatusForProvider:FIRAuthRecaptchaProviderPassword])
+      .andReturn(YES);
+  FIRGetOOBConfirmationCodeRequest *constRequestWithRecaptchaToken =
+      [FIRGetOOBConfirmationCodeRequest
+          passwordResetRequestWithEmail:kEmail
+                     actionCodeSettings:nil
+                   requestConfiguration:[FIRAuth auth].requestConfiguration];
+  [constRequestWithRecaptchaToken injectRecaptchaFields:kFakeRecaptchaResponse
+                                       recaptchaVersion:kFakeRecaptchaVersion];
+  OCMStub([mockVerifier
+      injectRecaptchaFields:[OCMArg any]
+                   provider:FIRAuthRecaptchaProviderPassword
+                     action:FIRAuthRecaptchaActionGetOobCode
+                 completion:([OCMArg invokeBlockWithArgs:constRequestWithRecaptchaToken, nil])]);
+  OCMExpect([_mockBackend getOOBConfirmationCode:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRGetOOBConfirmationCodeRequest *_Nullable request,
+                       FIRGetOOBConfirmationCodeResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          callback([[FIRGetOOBConfirmationCodeResponse alloc] init], nil);
+        });
+      });
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] sendPasswordResetWithEmail:kEmail
+                                  completion:^(NSError *_Nullable error) {
+                                    XCTAssertTrue([NSThread isMainThread]);
+                                    XCTAssertNil(error);
+                                    [expectation fulfill];
+                                  }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+}
+
+/** @fn testSendPasswordResetEmailWithRecaptchaFallbackSuccess
+    @brief Tests the flow of a successful @c sendPasswordResetWithEmail:completion: call.
+ */
+- (void)testSendPasswordResetEmailWithRecaptchaFallbackSuccess {
+  id mockVerifier = OCMClassMock([FIRAuthRecaptchaVerifier class]);
+  OCMStub([mockVerifier sharedRecaptchaVerifier:[FIRAuth auth]]).andReturn(mockVerifier);
+  OCMExpect([mockVerifier enablementStatusForProvider:FIRAuthRecaptchaProviderPassword])
+      .andReturn(NO);
+  FIRGetOOBConfirmationCodeRequest *constRequestWithRecaptchaToken =
+      [FIRGetOOBConfirmationCodeRequest
+          passwordResetRequestWithEmail:kEmail
+                     actionCodeSettings:nil
+                   requestConfiguration:[FIRAuth auth].requestConfiguration];
+  [constRequestWithRecaptchaToken injectRecaptchaFields:kFakeRecaptchaResponse
+                                       recaptchaVersion:kFakeRecaptchaVersion];
+  OCMStub([mockVerifier
+      injectRecaptchaFields:[OCMArg any]
+                   provider:FIRAuthRecaptchaProviderPassword
+                     action:FIRAuthRecaptchaActionGetOobCode
+                 completion:([OCMArg invokeBlockWithArgs:constRequestWithRecaptchaToken, nil])]);
+  OCMExpect([_mockBackend getOOBConfirmationCode:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRGetOOBConfirmationCodeRequest *_Nullable request,
+                       FIRGetOOBConfirmationCodeResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        NSError *underlyingError =
+            [[NSError alloc] initWithDomain:FIRAuthErrorDomain
+                                       code:FIRAuthErrorCodeInternalError
+                                   userInfo:@{
+                                     FIRAuthErrorUserInfoDeserializedResponseKey :
+                                         @{@"message" : @"MISSING_RECAPTCHA_TOKEN"}
+                                   }];
+        NSError *error = [[NSError alloc] initWithDomain:FIRAuthErrorDomain
+                                                    code:FIRAuthErrorCodeInternalError
+                                                userInfo:@{NSUnderlyingErrorKey : underlyingError}];
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          callback(nil, error);
+        });
+      });
+  OCMExpect([_mockBackend getOOBConfirmationCode:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRGetOOBConfirmationCodeRequest *_Nullable request,
+                       FIRGetOOBConfirmationCodeResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          callback([[FIRGetOOBConfirmationCodeResponse alloc] init], nil);
+        });
+      });
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] sendPasswordResetWithEmail:kEmail
+                                  completion:^(NSError *_Nullable error) {
+                                    XCTAssertTrue([NSThread isMainThread]);
+                                    XCTAssertNil(error);
+                                    [expectation fulfill];
+                                  }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+}
+#endif
+
 /** @fn testSendPasswordResetEmailSuccess
     @brief Tests the flow of a successful @c sendPasswordResetWithEmail:completion: call.
  */
@@ -1795,6 +2238,115 @@ static const NSTimeInterval kWaitInterval = .5;
   [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
   OCMVerifyAll(_mockBackend);
 }
+
+#if TARGET_OS_IOS && !TARGET_OS_MACCATALYST
+/** @fn testSendSignInLinkToEmailWithRecaptchaSuccess
+    @brief Tests the flow of a successful @c sendSignInLinkToEmail:actionCodeSettings:completion:
+        call.
+ */
+- (void)testSendSignInLinkToEmailWithRecaptchaSuccess {
+  id mockVerifier = OCMClassMock([FIRAuthRecaptchaVerifier class]);
+  OCMStub([mockVerifier sharedRecaptchaVerifier:[FIRAuth auth]]).andReturn(mockVerifier);
+  OCMExpect([mockVerifier enablementStatusForProvider:FIRAuthRecaptchaProviderPassword])
+      .andReturn(YES);
+  FIRGetOOBConfirmationCodeRequest *constRequestWithRecaptchaToken =
+      [FIRGetOOBConfirmationCodeRequest
+          signInWithEmailLinkRequest:kEmail
+                  actionCodeSettings:[self fakeActionCodeSettings]
+                requestConfiguration:[FIRAuth auth].requestConfiguration];
+  [constRequestWithRecaptchaToken injectRecaptchaFields:kFakeRecaptchaResponse
+                                       recaptchaVersion:kFakeRecaptchaVersion];
+  OCMStub([mockVerifier
+      injectRecaptchaFields:[OCMArg any]
+                   provider:FIRAuthRecaptchaProviderPassword
+                     action:FIRAuthRecaptchaActionGetOobCode
+                 completion:([OCMArg invokeBlockWithArgs:constRequestWithRecaptchaToken, nil])]);
+  OCMExpect([_mockBackend getOOBConfirmationCode:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRGetOOBConfirmationCodeRequest *_Nullable request,
+                       FIRGetOOBConfirmationCodeResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.continueURL, kContinueURL);
+        XCTAssertTrue(request.handleCodeInApp);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          callback([[FIRGetOOBConfirmationCodeResponse alloc] init], nil);
+        });
+      });
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] sendSignInLinkToEmail:kEmail
+                     actionCodeSettings:[self fakeActionCodeSettings]
+                             completion:^(NSError *_Nullable error) {
+                               XCTAssertTrue([NSThread isMainThread]);
+                               XCTAssertNil(error);
+                               [expectation fulfill];
+                             }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+}
+
+/** @fn testSendSignInLinkToEmailWithRecaptchaFallbackSuccess
+    @brief Tests the flow of a successful @c sendSignInLinkToEmail:actionCodeSettings:completion:
+        call.
+ */
+- (void)testSendSignInLinkToEmailWithRecaptchaFallbackSuccess {
+  id mockVerifier = OCMClassMock([FIRAuthRecaptchaVerifier class]);
+  OCMStub([mockVerifier sharedRecaptchaVerifier:[FIRAuth auth]]).andReturn(mockVerifier);
+  OCMExpect([mockVerifier enablementStatusForProvider:FIRAuthRecaptchaProviderPassword])
+      .andReturn(NO);
+  FIRGetOOBConfirmationCodeRequest *constRequestWithRecaptchaToken =
+      [FIRGetOOBConfirmationCodeRequest
+          signInWithEmailLinkRequest:kEmail
+                  actionCodeSettings:[self fakeActionCodeSettings]
+                requestConfiguration:[FIRAuth auth].requestConfiguration];
+  [constRequestWithRecaptchaToken injectRecaptchaFields:kFakeRecaptchaResponse
+                                       recaptchaVersion:kFakeRecaptchaVersion];
+  OCMStub([mockVerifier
+      injectRecaptchaFields:[OCMArg any]
+                   provider:FIRAuthRecaptchaProviderPassword
+                     action:FIRAuthRecaptchaActionGetOobCode
+                 completion:([OCMArg invokeBlockWithArgs:constRequestWithRecaptchaToken, nil])]);
+  OCMExpect([_mockBackend getOOBConfirmationCode:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRGetOOBConfirmationCodeRequest *_Nullable request,
+                       FIRGetOOBConfirmationCodeResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.continueURL, kContinueURL);
+        XCTAssertTrue(request.handleCodeInApp);
+        NSError *underlyingError =
+            [[NSError alloc] initWithDomain:FIRAuthErrorDomain
+                                       code:FIRAuthErrorCodeInternalError
+                                   userInfo:@{
+                                     FIRAuthErrorUserInfoDeserializedResponseKey :
+                                         @{@"message" : @"MISSING_RECAPTCHA_TOKEN"}
+                                   }];
+        NSError *error = [[NSError alloc] initWithDomain:FIRAuthErrorDomain
+                                                    code:FIRAuthErrorCodeInternalError
+                                                userInfo:@{NSUnderlyingErrorKey : underlyingError}];
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          callback(nil, error);
+        });
+      });
+  OCMExpect([_mockBackend getOOBConfirmationCode:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRGetOOBConfirmationCodeRequest *_Nullable request,
+                       FIRGetOOBConfirmationCodeResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.continueURL, kContinueURL);
+        XCTAssertTrue(request.handleCodeInApp);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          callback([[FIRGetOOBConfirmationCodeResponse alloc] init], nil);
+        });
+      });
+  XCTestExpectation *expectation = [self expectationWithDescription:@"callback"];
+  [[FIRAuth auth] sendSignInLinkToEmail:kEmail
+                     actionCodeSettings:[self fakeActionCodeSettings]
+                             completion:^(NSError *_Nullable error) {
+                               XCTAssertTrue([NSThread isMainThread]);
+                               XCTAssertNil(error);
+                               [expectation fulfill];
+                             }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+}
+#endif
 
 /** @fn testSendSignInLinkToEmailSuccess
     @brief Tests the flow of a successful @c sendSignInLinkToEmail:actionCodeSettings:completion:
@@ -2180,7 +2732,9 @@ static const NSTimeInterval kWaitInterval = .5;
   // Sign in a user.
   [self waitForSignIn];
 
-  // Set up expectation for secureToken RPC made by token refresh task.
+  // Set up expectation for secureToken RPC made by token refresh task. We call this twice, because
+  // we retry once if the access token is already expired.
+  [self mockSecureTokenResponseWithError:nil];
   [self mockSecureTokenResponseWithError:nil];
 
   // Verify that the current user's access token is the "old" access token before automatic token
@@ -2266,7 +2820,9 @@ static const NSTimeInterval kWaitInterval = .5;
   // token (kNewAccessToken).
   XCTAssertEqualObjects(kAccessToken, [FIRAuth auth].currentUser.rawAccessToken);
 
-  // Set up expectation for secureToken RPC made by a successful attempt to refresh tokens.
+  // Set up expectation for secureToken RPC made by a successful attempt to refresh tokens. We call
+  // this twice, because we retry once if the access token is already expired.
+  [self mockSecureTokenResponseWithError:nil];
   [self mockSecureTokenResponseWithError:nil];
 
   // Execute saved token refresh task.
@@ -2306,7 +2862,9 @@ static const NSTimeInterval kWaitInterval = .5;
   // Verify that current user is still valid with old access token.
   XCTAssertEqualObjects(kAccessToken, [FIRAuth auth].currentUser.rawAccessToken);
 
-  // Set up expectation for secureToken RPC made by a successful attempt to refresh tokens.
+  // Set up expectation for secureToken RPC made by a successful attempt to refresh tokens. We call
+  // this twice, because we retry once if the access token is already expired.
+  [self mockSecureTokenResponseWithError:nil];
   [self mockSecureTokenResponseWithError:nil];
 
   // Execute saved token refresh task.
@@ -2384,7 +2942,7 @@ static const NSTimeInterval kWaitInterval = .5;
     // 'application:openURL:options:' is only available on iOS 9.0 or newer.
     NSURL *url = [NSURL URLWithString:@"https://localhost"];
 
-    [OCMExpect([self.mockAuthURLPresenter canHandleURL:url]) andReturnValue:@(YES)];
+    OCMExpect([self.mockAuthURLPresenter canHandleURL:url]).andReturn(YES);
 
     XCTAssertTrue([self.fakeApplicationDelegate
         application:[GULAppDelegateSwizzler sharedApplication]
@@ -2398,7 +2956,7 @@ static const NSTimeInterval kWaitInterval = .5;
 - (void)testAppOpenURLWithSourceApplication_AuthPresenterCanHandleURL {
   NSURL *url = [NSURL URLWithString:@"https://localhost"];
 
-  [OCMExpect([self.mockAuthURLPresenter canHandleURL:url]) andReturnValue:@(YES)];
+  OCMExpect([self.mockAuthURLPresenter canHandleURL:url]).andReturn(YES);
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -2685,6 +3243,97 @@ static const NSTimeInterval kWaitInterval = .5;
   });
   dispatch_semaphore_wait(workerSemaphore,
                           DISPATCH_TIME_FOREVER /*DISPATCH_TIME_NOW + 10 * NSEC_PER_SEC*/);
+}
+
+/** @fn testRevokeTokenSuccess
+    @brief Tests the flow of a successful @c revokeToken:completion.
+ */
+- (void)testRevokeTokenSuccess {
+  OCMExpect([_mockBackend verifyPassword:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRVerifyPasswordRequest *_Nullable request,
+                       FIRVerifyPasswordResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.password, kFakePassword);
+        XCTAssertTrue(request.returnSecureToken);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          id mockVerifyPasswordResponse = OCMClassMock([FIRVerifyPasswordResponse class]);
+          [self stubTokensWithMockResponse:mockVerifyPasswordResponse];
+          callback(mockVerifyPasswordResponse, nil);
+        });
+      });
+  [self expectGetAccountInfo];
+  XCTestExpectation *signInExpectation = [self expectationWithDescription:@"signIn"];
+  [[FIRAuth auth] signOut:NULL];
+  [[FIRAuth auth] signInWithEmail:kEmail
+                         password:kFakePassword
+                       completion:^(FIRAuthDataResult *_Nullable result, NSError *_Nullable error) {
+                         [self assertUser:result.user];
+                         XCTAssertNil(error);
+                         [signInExpectation fulfill];
+                       }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  [self assertUser:[FIRAuth auth].currentUser];
+  OCMExpect([_mockBackend revokeToken:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(
+          ^(FIRRevokeTokenRequest *_Nullable request, FIRRevokeTokenResponseCallback callback) {
+            dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+              id mockRevokeTokenResponse = OCMClassMock([FIRRevokeTokenResponse class]);
+              callback(mockRevokeTokenResponse, nil);
+            });
+          });
+  XCTestExpectation *revokeExpectation = [self expectationWithDescription:@"callback"];
+  NSString *code = @"code";
+  [[FIRAuth auth] revokeTokenWithAuthorizationCode:code
+                                        completion:^(NSError *_Nullable error) {
+                                          XCTAssertNil(error);
+                                          [revokeExpectation fulfill];
+                                        }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+}
+
+/** @fn testRevokeTokenMissingCallback
+    @brief Tests the flow of  @c revokeToken:completion with a nil callback.
+ */
+- (void)testRevokeTokenMissingCallback {
+  OCMExpect([_mockBackend verifyPassword:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(^(FIRVerifyPasswordRequest *_Nullable request,
+                       FIRVerifyPasswordResponseCallback callback) {
+        XCTAssertEqualObjects(request.APIKey, kAPIKey);
+        XCTAssertEqualObjects(request.email, kEmail);
+        XCTAssertEqualObjects(request.password, kFakePassword);
+        XCTAssertTrue(request.returnSecureToken);
+        dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+          id mockVerifyPasswordResponse = OCMClassMock([FIRVerifyPasswordResponse class]);
+          [self stubTokensWithMockResponse:mockVerifyPasswordResponse];
+          callback(mockVerifyPasswordResponse, nil);
+        });
+      });
+  [self expectGetAccountInfo];
+  XCTestExpectation *signInExpectation = [self expectationWithDescription:@"signIn"];
+  [[FIRAuth auth] signOut:NULL];
+  [[FIRAuth auth] signInWithEmail:kEmail
+                         password:kFakePassword
+                       completion:^(FIRAuthDataResult *_Nullable result, NSError *_Nullable error) {
+                         [self assertUser:result.user];
+                         XCTAssertNil(error);
+                         [signInExpectation fulfill];
+                       }];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
+  [self assertUser:[FIRAuth auth].currentUser];
+  XCTestExpectation *revokeExpectation = [self expectationWithDescription:@"revoke"];
+  OCMExpect([_mockBackend revokeToken:[OCMArg any] callback:[OCMArg any]])
+      .andCallBlock2(
+          ^(FIRRevokeTokenRequest *_Nullable request, FIRRevokeTokenResponseCallback callback) {
+            dispatch_async(FIRAuthGlobalWorkQueue(), ^() {
+              id mockRevokeTokenResponse = OCMClassMock([FIRRevokeTokenResponse class]);
+              callback(mockRevokeTokenResponse, nil);
+              [revokeExpectation fulfill];
+            });
+          });
+  NSString *code = @"code";
+  [[FIRAuth auth] revokeTokenWithAuthorizationCode:code completion:nil];
+  [self waitForExpectationsWithTimeout:kExpectationTimeout handler:nil];
 }
 
 @end

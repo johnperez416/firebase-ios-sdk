@@ -286,7 +286,10 @@ class LocalSerializerTest : public ::testing::Test {
         serializer.DecodeTargetData(&reader, *message);
 
     EXPECT_OK(reader.status());
-    EXPECT_EQ(target_data, actual_target_data);
+    // Set the expected_count in expected TargetData to null, as serializing
+    // a TargetData into local Target proto will drop the expected_count and
+    // the deserialized actual TargetData will not include expected_count.
+    EXPECT_EQ(target_data.WithExpectedCount(absl::nullopt), actual_target_data);
   }
 
   ByteString EncodeTargetData(local::LocalSerializer* localSerializer,
@@ -324,14 +327,13 @@ class LocalSerializerTest : public ::testing::Test {
 
   void ExpectSerializationRoundTrip(const NamedQuery& named_query,
                                     const ::firestore::NamedQuery& proto) {
-    ByteString bytes = EncodeNamedQuery(&serializer, named_query);
+    ByteString bytes = EncodeNamedQuery(named_query);
     auto actual = ProtobufParse<::firestore::NamedQuery>(bytes);
     EXPECT_TRUE(msg_diff.Compare(proto, actual)) << message_differences;
   }
 
-  ByteString EncodeNamedQuery(local::LocalSerializer* serializer,
-                              const NamedQuery& named_query) {
-    return MakeByteString(serializer->EncodeNamedQuery(named_query));
+  ByteString EncodeNamedQuery(const NamedQuery& named_query) {
+    return MakeByteString(serializer.EncodeNamedQuery(named_query));
   }
 
   void ExpectDeserializationRoundTrip(const NamedQuery& named_query,
@@ -347,123 +349,28 @@ class LocalSerializerTest : public ::testing::Test {
     EXPECT_EQ(named_query, actual_named_query);
   }
 
+  void ExpectSerializationRoundTrip(const Mutation& mutation,
+                                    const v1::Write& proto) {
+    ByteString bytes = MakeByteString(serializer.EncodeMutation(mutation));
+    auto actual = ProtobufParse<v1::Write>(bytes);
+    EXPECT_TRUE(msg_diff.Compare(proto, actual)) << message_differences;
+  }
+
+  void ExpectDeserializationRoundTrip(const Mutation& mutation,
+                                      const v1::Write& proto) {
+    ByteString bytes = ProtobufSerialize(proto);
+    StringReader reader(bytes);
+
+    auto message = Message<google_firestore_v1_Write>::TryParse(&reader);
+    Mutation actual_mutation = serializer.DecodeMutation(&reader, *message);
+
+    EXPECT_OK(reader.status());
+    EXPECT_EQ(mutation, actual_mutation);
+  }
+
   std::string message_differences;
   MessageDifferencer msg_diff;
 };
-
-// TODO(b/174608374): Remove these tests once we perform a schema migration.
-TEST_F(LocalSerializerTest, SetMutationAndTransformMutationAreSquashed) {
-  ::firestore::client::WriteBatch batch_proto{};
-  batch_proto.set_batch_id(42);
-  *batch_proto.add_writes() = SetProto();
-  *batch_proto.add_writes() = LegacyTransformProto();
-  *batch_proto.mutable_local_write_time() = WriteTimeProto();
-
-  ByteString bytes = ProtobufSerialize(batch_proto);
-  StringReader reader(bytes);
-  auto message = Message<firestore_client_WriteBatch>::TryParse(&reader);
-  MutationBatch decoded = serializer.DecodeMutationBatch(&reader, *message);
-  ASSERT_EQ(1, decoded.mutations().size());
-  ASSERT_EQ(Mutation::Type::Set, decoded.mutations()[0].type());
-
-  Message<google_firestore_v1_Write> encoded{
-      remote_serializer.EncodeMutation(decoded.mutations()[0])};
-  ExpectSet(*encoded);
-  ExpectUpdateTransform(*encoded);
-}
-
-// TODO(b/174608374): Remove these tests once we perform a schema migration.
-TEST_F(LocalSerializerTest, PatchMutationAndTransformMutationAreSquashed) {
-  ::firestore::client::WriteBatch batch_proto{};
-  batch_proto.set_batch_id(42);
-  *batch_proto.add_writes() = PatchProto();
-  *batch_proto.add_writes() = LegacyTransformProto();
-  *batch_proto.mutable_local_write_time() = WriteTimeProto();
-
-  ByteString bytes = ProtobufSerialize(batch_proto);
-  StringReader reader(bytes);
-  auto message = Message<firestore_client_WriteBatch>::TryParse(&reader);
-  MutationBatch decoded = serializer.DecodeMutationBatch(&reader, *message);
-  ASSERT_EQ(1, decoded.mutations().size());
-  ASSERT_EQ(Mutation::Type::Patch, decoded.mutations()[0].type());
-
-  Message<google_firestore_v1_Write> encoded{
-      remote_serializer.EncodeMutation(decoded.mutations()[0])};
-  ExpectPatch(*encoded);
-  ExpectUpdateTransform(*encoded);
-}
-
-// TODO(b/174608374): Remove these tests once we perform a schema migration.
-TEST_F(LocalSerializerTest, TransformAndTransformThrowError) {
-  ::firestore::client::WriteBatch batch_proto{};
-  batch_proto.set_batch_id(42);
-  *batch_proto.add_writes() = LegacyTransformProto();
-  *batch_proto.add_writes() = LegacyTransformProto();
-  *batch_proto.mutable_local_write_time() = WriteTimeProto();
-
-  ByteString bytes = ProtobufSerialize(batch_proto);
-  StringReader reader(bytes);
-  auto message = Message<firestore_client_WriteBatch>::TryParse(&reader);
-  EXPECT_ANY_THROW(serializer.DecodeMutationBatch(&reader, *message));
-}
-
-// TODO(b/174608374): Remove these tests once we perform a schema migration.
-TEST_F(LocalSerializerTest, DeleteAndTransformThrowError) {
-  ::firestore::client::WriteBatch batch_proto{};
-  batch_proto.set_batch_id(42);
-  *batch_proto.add_writes() = DeleteProto();
-  *batch_proto.add_writes() = LegacyTransformProto();
-  *batch_proto.mutable_local_write_time() = WriteTimeProto();
-
-  ByteString bytes = ProtobufSerialize(batch_proto);
-  StringReader reader(bytes);
-  auto message = Message<firestore_client_WriteBatch>::TryParse(&reader);
-  EXPECT_ANY_THROW(serializer.DecodeMutationBatch(&reader, *message));
-}
-
-// TODO(b/174608374): Remove these tests once we perform a schema migration.
-TEST_F(LocalSerializerTest, MultipleMutationsAreSquashed) {
-  ::firestore::client::WriteBatch batch_proto{};
-  batch_proto.set_batch_id(42);
-  *batch_proto.add_writes() = SetProto();
-  *batch_proto.add_writes() = SetProto();
-  *batch_proto.add_writes() = LegacyTransformProto();
-  *batch_proto.add_writes() = DeleteProto();
-  *batch_proto.add_writes() = PatchProto();
-  *batch_proto.add_writes() = LegacyTransformProto();
-  *batch_proto.add_writes() = PatchProto();
-  *batch_proto.mutable_local_write_time() = WriteTimeProto();
-
-  ByteString bytes = ProtobufSerialize(batch_proto);
-  StringReader reader(bytes);
-  auto message = Message<firestore_client_WriteBatch>::TryParse(&reader);
-  MutationBatch decoded = serializer.DecodeMutationBatch(&reader, *message);
-  ASSERT_EQ(5, decoded.mutations().size());
-
-  Message<google_firestore_v1_Write> encoded{
-      remote_serializer.EncodeMutation(decoded.mutations()[0])};
-  ExpectSet(*encoded);
-  ExpectNoUpdateTransform(*encoded);
-
-  encoded =
-      MakeMessage(remote_serializer.EncodeMutation(decoded.mutations()[1]));
-  ExpectSet(*encoded);
-  ExpectUpdateTransform(*encoded);
-
-  encoded =
-      MakeMessage(remote_serializer.EncodeMutation(decoded.mutations()[2]));
-  ExpectDelete(*encoded);
-
-  encoded =
-      MakeMessage(remote_serializer.EncodeMutation(decoded.mutations()[3]));
-  ExpectPatch(*encoded);
-  ExpectUpdateTransform(*encoded);
-
-  encoded =
-      MakeMessage(remote_serializer.EncodeMutation(decoded.mutations()[4]));
-  ExpectPatch(*encoded);
-  ExpectNoUpdateTransform(*encoded);
-}
 
 TEST_F(LocalSerializerTest, EncodesMutationBatch) {
   Mutation base =
@@ -562,10 +469,46 @@ TEST_F(LocalSerializerTest, EncodesTargetData) {
   SnapshotVersion limbo_free_version = testutil::Version(1000);
   ByteString resume_token = testutil::ResumeToken(1039);
 
+  TargetData target_data(
+      query.ToTarget(), target_id, sequence_number, QueryPurpose::Listen,
+      SnapshotVersion(version), SnapshotVersion(limbo_free_version),
+      ByteString(resume_token), /*expected_count=*/absl::nullopt);
+
+  ::firestore::client::Target expected;
+  expected.set_target_id(target_id);
+  expected.set_last_listen_sequence_number(sequence_number);
+  expected.mutable_snapshot_version()->set_nanos(1039000);
+  expected.mutable_last_limbo_free_snapshot_version()->set_nanos(1000000);
+  expected.set_resume_token(resume_token.data(), resume_token.size());
+  v1::Target::QueryTarget* query_proto = expected.mutable_query();
+
+  // Add expected collection.
+  query_proto->set_parent("projects/p/databases/d/documents");
+  v1::StructuredQuery::CollectionSelector from;
+  from.set_collection_id("room");
+  *query_proto->mutable_structured_query()->add_from() = std::move(from);
+
+  // Add default order_by.
+  v1::StructuredQuery::Order order;
+  order.mutable_field()->set_field_path(FieldPath::kDocumentKeyPath);
+  order.set_direction(v1::StructuredQuery::ASCENDING);
+  *query_proto->mutable_structured_query()->add_order_by() = std::move(order);
+
+  ExpectRoundTrip(target_data, expected);
+}
+
+TEST_F(LocalSerializerTest, EncodesTargetDataWillDropExpectedCount) {
+  core::Query query = Query("room");
+  TargetId target_id = 42;
+  ListenSequenceNumber sequence_number = 10;
+  SnapshotVersion version = testutil::Version(1039);
+  SnapshotVersion limbo_free_version = testutil::Version(1000);
+  ByteString resume_token = testutil::ResumeToken(1039);
+
   TargetData target_data(query.ToTarget(), target_id, sequence_number,
                          QueryPurpose::Listen, SnapshotVersion(version),
                          SnapshotVersion(limbo_free_version),
-                         ByteString(resume_token));
+                         ByteString(resume_token), /*expected_count=*/1234);
 
   ::firestore::client::Target expected;
   expected.set_target_id(target_id);
@@ -626,10 +569,36 @@ TEST_F(LocalSerializerTest, EncodesTargetDataWithDocumentQuery) {
   SnapshotVersion limbo_free_version = testutil::Version(1000);
   ByteString resume_token = testutil::ResumeToken(1039);
 
+  TargetData target_data(
+      query.ToTarget(), target_id, sequence_number, QueryPurpose::Listen,
+      SnapshotVersion(version), SnapshotVersion(limbo_free_version),
+      ByteString(resume_token), /*expected_count=*/absl::nullopt);
+
+  ::firestore::client::Target expected;
+  expected.set_target_id(target_id);
+  expected.set_last_listen_sequence_number(sequence_number);
+  expected.mutable_snapshot_version()->set_nanos(1039000);
+  expected.mutable_last_limbo_free_snapshot_version()->set_nanos(1000000);
+  expected.set_resume_token(resume_token.data(), resume_token.size());
+  v1::Target::DocumentsTarget* documents_proto = expected.mutable_documents();
+  documents_proto->add_documents("projects/p/databases/d/documents/room/1");
+
+  ExpectRoundTrip(target_data, expected);
+}
+
+TEST_F(LocalSerializerTest,
+       EncodesTargetDataWithDocumentQueryWillDropExpectedCount) {
+  core::Query query = Query("room/1");
+  TargetId target_id = 42;
+  ListenSequenceNumber sequence_number = 10;
+  SnapshotVersion version = testutil::Version(1039);
+  SnapshotVersion limbo_free_version = testutil::Version(1000);
+  ByteString resume_token = testutil::ResumeToken(1039);
+
   TargetData target_data(query.ToTarget(), target_id, sequence_number,
                          QueryPurpose::Listen, SnapshotVersion(version),
                          SnapshotVersion(limbo_free_version),
-                         ByteString(resume_token));
+                         ByteString(resume_token), /*expected_count=*/1234);
 
   ::firestore::client::Target expected;
   expected.set_target_id(target_id);
@@ -725,6 +694,16 @@ TEST_F(LocalSerializerTest, EncodesNamedLimitToLastQuery) {
       std::move(expected_bundled_query);
 
   ExpectRoundTrip(named_query, expected_named_query);
+}
+
+TEST_F(LocalSerializerTest, EncodesMutation) {
+  Mutation mutation =
+      PatchMutation(Key("docs/1"), WrapObject("a", "b", "num", 1),
+                    FieldMask{Field("a")}, Precondition::Exists(true));
+
+  v1::Write expected_mutation = PatchProto();
+
+  ExpectRoundTrip(mutation, expected_mutation);
 }
 
 }  // namespace

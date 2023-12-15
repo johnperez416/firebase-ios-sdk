@@ -25,6 +25,8 @@ let package = Package(
     .executable(name: "firebase-releaser", targets: ["FirebaseReleaser"]),
     .executable(name: "zip-builder", targets: ["ZipBuilder"]),
     .executable(name: "podspecs-tester", targets: ["PodspecsTester"]),
+    .executable(name: "manifest", targets: ["ManifestParser"]),
+    .executable(name: "privacy-manifest-generator", targets: ["PrivacyManifestGenerator"]),
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser", .exact("0.1.0")),
@@ -38,6 +40,10 @@ let package = Package(
       name: "FirebaseManifest"
     ),
     .target(
+      name: "ManifestParser",
+      dependencies: ["ArgumentParser", "FirebaseManifest", "Utils"]
+    ),
+    .target(
       name: "FirebaseReleaser",
       dependencies: ["ArgumentParser", "FirebaseManifest", "Utils"]
     ),
@@ -47,6 +53,13 @@ let package = Package(
     ),
     .target(
       name: "Utils"
+    ),
+    .target(
+      name: "PrivacyManifestGenerator",
+      dependencies: ["ArgumentParser", "PrivacyKit"]
+    ),
+    .target(
+      name: "PrivacyKit"
     ),
   ]
 )

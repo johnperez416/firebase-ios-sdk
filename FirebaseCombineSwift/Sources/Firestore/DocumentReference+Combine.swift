@@ -25,7 +25,7 @@
 
   @available(swift 5.0)
   @available(iOS 13.0, macOS 10.15, macCatalyst 13.0, tvOS 13.0, watchOS 6.0, *)
-  extension DocumentReference {
+  public extension DocumentReference {
     // MARK: - Set Data
 
     /// Overwrites the document referred to by this `DocumentReference`. If no document exists, it
@@ -36,7 +36,7 @@
     /// - Returns: A publisher emitting a `Void` value once the document has been successfully
     ///   written to the server. This publisher will not emit while the client is offline, though
     ///   local changes will be visible immediately.
-    public func setData(_ documentData: [String: Any]) -> Future<Void, Error> {
+    func setData(_ documentData: [String: Any]) -> Future<Void, Error> {
       Future { promise in
         self.setData(documentData) { error in
           if let error = error {
@@ -59,7 +59,7 @@
     /// - Returns: A publisher emitting a `Void` value once the document has been successfully
     ///   written to the server. This publisher will not emit while the client is offline, though
     ///   local changes will be visible immediately.
-    public func setData(_ documentData: [String: Any], merge: Bool) -> Future<Void, Error> {
+    func setData(_ documentData: [String: Any], merge: Bool) -> Future<Void, Error> {
       Future { promise in
         self.setData(documentData, merge: merge) { error in
           if let error = error {
@@ -85,7 +85,7 @@
     /// - Returns: A publisher emitting a `Void` value once the document has been successfully
     ///   written to the server. This publisher will not emit while the client is offline, though
     ///   local changes will be visible immediately.
-    public func setData(_ documentData: [String: Any], mergeFields: [Any]) -> Future<Void, Error> {
+    func setData(_ documentData: [String: Any], mergeFields: [Any]) -> Future<Void, Error> {
       Future { promise in
         self.setData(documentData, mergeFields: mergeFields) { error in
           if let error = error {
@@ -99,9 +99,9 @@
 
     #if canImport(FirebaseFirestoreSwift)
 
-      /// Encodes an instance of `Encodable` and overwrites the encoded data to the document referred
-      ///  by this `DocumentReference`. If no document exists, it is created. If a document already
-      ///  exists, it is overwritten.
+      /// Encodes an instance of `Encodable` and overwrites the encoded data to the document
+      ///  referred by this `DocumentReference`. If no document exists, it is created. If a
+      ///  document already exists, it is overwritten.
       ///
       /// - Parameters:
       ///   - value: An instance of `Encodable` to be encoded to a document.
@@ -109,14 +109,14 @@
       /// - Returns: A publisher emitting a `Void` value once the document has been successfully
       ///   written to the server. This publisher will not emit while the client is offline, though
       ///   local changes will be visible immediately.
-      public func setData<T: Encodable>(from value: T,
-                                        encoder: Firestore.Encoder = Firestore.Encoder()) -> Future<
+      func setData<T: Encodable>(from value: T,
+                                 encoder: Firestore.Encoder = Firestore.Encoder()) -> Future<
         Void,
         Error
       > {
         Future { promise in
           do {
-            try self.setData(from: value) { error in
+            try self.setData(from: value, encoder: encoder) { error in
               if let error = error {
                 promise(.failure(error))
               } else {
@@ -129,9 +129,11 @@
         }
       }
 
-      /// Encodes an instance of `Encodable` and overwrites the encoded data to the document referred
+      /// Encodes an instance of `Encodable` and overwrites the encoded data to the document
+      /// referred
       ///  by this `DocumentReference`. If no document exists, it is created. If a document already
-      ///  exists, it is overwritten. If you pass `merge: true`, the provided Encodable will be merged
+      ///  exists, it is overwritten. If you pass `merge: true`, the provided Encodable will be
+      /// merged
       ///   into any existing document.
       ///
       /// - Parameters:
@@ -141,14 +143,14 @@
       /// - Returns: A publisher emitting a `Void` value once the document has been successfully
       ///   written to the server. This publisher will not emit while the client is offline, though
       ///   local changes will be visible immediately.
-      public func setData<T: Encodable>(from value: T, merge: Bool,
-                                        encoder: Firestore.Encoder = Firestore.Encoder()) -> Future<
+      func setData<T: Encodable>(from value: T, merge: Bool,
+                                 encoder: Firestore.Encoder = Firestore.Encoder()) -> Future<
         Void,
         Error
       > {
         Future { promise in
           do {
-            try self.setData(from: value, merge: merge) { error in
+            try self.setData(from: value, merge: merge, encoder: encoder) { error in
               if let error = error {
                 promise(.failure(error))
               } else {
@@ -162,7 +164,8 @@
       }
 
       /// Encodes an instance of `Encodable` and writes the encoded data to the document referred by
-      /// this `DocumentReference` by only replacing the fields specified under mergeFields. Any field
+      /// this `DocumentReference` by only replacing the fields specified under mergeFields. Any
+      /// field
       /// that is not specified in mergeFields is ignored and remains untouched. If the document
       /// doesn’t yet exist, this method creates it and then sets the data.
       ///
@@ -175,14 +178,14 @@
       /// - Returns: A publisher emitting a `Void` value once the document has been successfully
       ///   written to the server. This publisher will not emit while the client is offline, though
       ///   local changes will be visible immediately.
-      public func setData<T: Encodable>(from value: T, mergeFields: [Any],
-                                        encoder: Firestore.Encoder = Firestore.Encoder()) -> Future<
+      func setData<T: Encodable>(from value: T, mergeFields: [Any],
+                                 encoder: Firestore.Encoder = Firestore.Encoder()) -> Future<
         Void,
         Error
       > {
         Future { promise in
           do {
-            try self.setData(from: value, mergeFields: mergeFields) { error in
+            try self.setData(from: value, mergeFields: mergeFields, encoder: encoder) { error in
               if let error = error {
                 promise(.failure(error))
               } else {
@@ -208,7 +211,7 @@
     ///   execute when the client is online and the commit has completed against the server. This
     ///   publisher will not emit while the device is offline, though local changes will be visible
     ///   immediately.
-    public func updateData(_ documentData: [String: Any]) -> Future<Void, Error> {
+    func updateData(_ documentData: [String: Any]) -> Future<Void, Error> {
       Future { promise in
         self.updateData(documentData) { error in
           if let error = error {
@@ -227,7 +230,7 @@
     /// - Returns: A publisher emitting a `Void` when the document has been deleted from the server.
     ///   This publisher will not emit while the device is offline, though local changes will be
     ///   visible immediately.
-    public func delete() -> Future<Void, Error> {
+    func delete() -> Future<Void, Error> {
       Future { promise in
         self.delete { error in
           if let error = error {
@@ -247,7 +250,7 @@
     ///  (`Source.cache`), the server only (`Source.server`), or to attempt the server and fall back
     ///   to the cache (`Source.default`).
     /// - Returns: A publisher emitting a `DocumentSnapshot` instance.
-    public func getDocument(source: FirestoreSource = .default)
+    func getDocument(source: FirestoreSource = .default)
       -> Future<DocumentSnapshot, Error> {
       Future { promise in
         self.getDocument(source: source) { snapshot, error in
@@ -267,7 +270,7 @@
     /// - Parameter includeMetadataChanges: Whether metadata-only changes (i.e. only
     ///   `DocumentSnapshot.metadata` changed) should trigger snapshot events.
     /// - Returns: A publisher emitting `DocumentSnapshot` instances.
-    public func snapshotPublisher(includeMetadataChanges: Bool = false)
+    func snapshotPublisher(includeMetadataChanges: Bool = false)
       -> AnyPublisher<DocumentSnapshot, Error> {
       let subject = PassthroughSubject<DocumentSnapshot, Error>()
       let listenerHandle =

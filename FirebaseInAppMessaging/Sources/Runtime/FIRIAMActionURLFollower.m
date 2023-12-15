@@ -15,7 +15,7 @@
  */
 
 #import <TargetConditionals.h>
-#if TARGET_OS_IOS || TARGET_OS_TV
+#if TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -153,7 +153,7 @@ NS_EXTENSION_UNAVAILABLE("Firebase In App Messaging is not supported for iOS ext
 
 // Try to handle the url as a custom scheme url link by triggering
 // application:openURL:options: on App's delegate object directly.
-// @returns YES if that delegate method is defined and returns YES.
+// @return YES if that delegate method is defined and returns YES.
 - (BOOL)followURLWithAppDelegateOpenURLActivity:(NSURL *)url {
   if (self.isNewAppDelegateOpenURLDefined) {
     FIRLogDebug(kFIRLoggerInAppMessaging, @"I-IAM210008",
@@ -168,7 +168,7 @@ NS_EXTENSION_UNAVAILABLE("Firebase In App Messaging is not supported for iOS ext
 
 // Try to handle the url as a universal link by triggering
 // application:continueUserActivity:restorationHandler: on App's delegate object directly.
-// @returns YES if that delegate method is defined and seeing a YES being returned from
+// @return YES if that delegate method is defined and seeing a YES being returned from
 // trigging it
 - (BOOL)followURLWithContinueUserActivity:(NSURL *)url {
   if (self.isContinueUserActivityMethodDefined) {
@@ -227,4 +227,4 @@ NS_EXTENSION_UNAVAILABLE("Firebase In App Messaging is not supported for iOS ext
 }
 @end
 
-#endif  // TARGET_OS_IOS || TARGET_OS_TV
+#endif  // TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)

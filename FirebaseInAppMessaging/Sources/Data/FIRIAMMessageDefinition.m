@@ -15,14 +15,14 @@
  */
 
 #import <TargetConditionals.h>
-#if TARGET_OS_IOS || TARGET_OS_TV
+#if TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)
 
 #import "FirebaseInAppMessaging/Sources/Private/Data/FIRIAMMessageDefinition.h"
 
 @implementation FIRIAMMessageRenderData
 
 - (instancetype)initWithMessageID:(NSString *)messageID
-                      messageName:(NSString *)messageName
+                      messageName:(nullable NSString *)messageName
                       contentData:(id<FIRIAMMessageContentData>)contentData
                   renderingEffect:(FIRIAMRenderingEffectSetting *)renderEffect {
   if (self = [super init]) {
@@ -70,12 +70,13 @@
 }
 
 - (instancetype)initTestMessageWithRenderData:(FIRIAMMessageRenderData *)renderData
+                                      appData:(nullable NSDictionary *)appData
                             experimentPayload:(nullable ABTExperimentPayload *)experimentPayload {
   return [self initWithRenderData:renderData
                         startTime:0
                           endTime:0
                 triggerDefinition:@[]
-                          appData:nil
+                          appData:appData
                 experimentPayload:experimentPayload
                     isTestMessage:YES];
 }
@@ -108,4 +109,4 @@
 }
 @end
 
-#endif  // TARGET_OS_IOS || TARGET_OS_TV
+#endif  // TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)

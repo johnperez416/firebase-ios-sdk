@@ -16,6 +16,8 @@
 
 #include "Firestore/core/test/unit/local/local_store_test.h"
 
+#include <thread>  // NOLINT(build/c++11)
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -24,6 +26,7 @@
 #include "Firestore/core/src/bundle/named_query.h"
 #include "Firestore/core/src/core/field_filter.h"
 #include "Firestore/core/src/credentials/user.h"
+#include "Firestore/core/src/local/index_backfiller.h"
 #include "Firestore/core/src/local/local_view_changes.h"
 #include "Firestore/core/src/local/local_write_result.h"
 #include "Firestore/core/src/local/persistence.h"
@@ -31,11 +34,19 @@
 #include "Firestore/core/src/local/target_data.h"
 #include "Firestore/core/src/model/delete_mutation.h"
 #include "Firestore/core/src/model/document.h"
+#include "Firestore/core/src/model/document_key.h"
+#include "Firestore/core/src/model/field_index.h"
+#include "Firestore/core/src/model/field_mask.h"
+#include "Firestore/core/src/model/field_path.h"
+#include "Firestore/core/src/model/field_transform.h"
 #include "Firestore/core/src/model/mutable_document.h"
+#include "Firestore/core/src/model/mutation.h"
 #include "Firestore/core/src/model/mutation_batch_result.h"
 #include "Firestore/core/src/model/patch_mutation.h"
+#include "Firestore/core/src/model/server_timestamp_util.h"
 #include "Firestore/core/src/model/set_mutation.h"
 #include "Firestore/core/src/model/transform_operation.h"
+#include "Firestore/core/src/remote/existence_filter.h"
 #include "Firestore/core/src/remote/remote_event.h"
 #include "Firestore/core/src/remote/watch_change.h"
 #include "Firestore/core/test/unit/remote/fake_target_metadata_provider.h"
@@ -70,6 +81,8 @@ using model::TargetId;
 using nanopb::ByteString;
 using nanopb::Message;
 using remote::DocumentWatchChange;
+using remote::ExistenceFilter;
+using remote::ExistenceFilterWatchChange;
 using remote::FakeTargetMetadataProvider;
 using remote::RemoteEvent;
 using remote::WatchChangeAggregator;
@@ -77,13 +90,18 @@ using remote::WatchTargetChange;
 using remote::WatchTargetChangeState;
 using util::Status;
 
+using testutil::AddedRemoteEvent;
 using testutil::Array;
 using testutil::DeletedDoc;
 using testutil::Doc;
 using testutil::Key;
 using testutil::Map;
+using testutil::OverlayTypeMap;
 using testutil::Query;
+using testutil::ServerTimestamp;
 using testutil::UnknownDoc;
+using testutil::UpdateRemoteEvent;
+using testutil::UpdateRemoteEventWithLimboTargets;
 using testutil::Value;
 using testutil::Vector;
 
@@ -101,28 +119,6 @@ MutableDocumentMap DocVectorToMap(const std::vector<MutableDocument>& docs) {
     result = result.insert(d.key(), d);
   }
   return result;
-}
-
-RemoteEvent UpdateRemoteEventWithLimboTargets(
-    const MutableDocument& doc,
-    const std::vector<TargetId>& updated_in_targets,
-    const std::vector<TargetId>& removed_from_targets,
-    const std::vector<TargetId>& limbo_targets) {
-  HARD_ASSERT(!doc.is_found_document() || !doc.has_local_mutations(),
-              "Docs from remote updates shouldn't have local changes.");
-  DocumentWatchChange change{updated_in_targets, removed_from_targets,
-                             doc.key(), doc};
-
-  std::vector<TargetId> listens = updated_in_targets;
-  listens.insert(listens.end(), removed_from_targets.begin(),
-                 removed_from_targets.end());
-
-  auto metadata_provider =
-      FakeTargetMetadataProvider::CreateSingleResultProvider(doc.key(), listens,
-                                                             limbo_targets);
-  WatchChangeAggregator aggregator{&metadata_provider};
-  aggregator.HandleDocumentChange(change);
-  return aggregator.CreateRemoteEvent(doc.version());
 }
 
 RemoteEvent NoChangeEvent(int target_id,
@@ -148,42 +144,22 @@ RemoteEvent NoChangeEvent(int target_id, int version) {
 }
 
 /** Creates a remote event that inserts a list of documents. */
-RemoteEvent AddedRemoteEvent(const std::vector<MutableDocument>& docs,
-                             const std::vector<TargetId>& added_to_targets) {
-  HARD_ASSERT(!docs.empty(), "Cannot pass empty docs array");
+RemoteEvent ExistenceFilterEvent(TargetId target_id,
+                                 const DocumentKeySet& synced_keys,
+                                 int remote_count,
+                                 int version) {
+  TargetData target_data(Query("foo").ToTarget(), target_id, 0,
+                         QueryPurpose::Listen);
+  remote::FakeTargetMetadataProvider metadata_provider;
+  metadata_provider.SetSyncedKeys(synced_keys, target_data);
 
-  const ResourcePath& collection_path = docs[0].key().path().PopLast();
-  auto metadata_provider =
-      FakeTargetMetadataProvider::CreateEmptyResultProvider(collection_path,
-                                                            added_to_targets);
+  ExistenceFilter existence_filter{remote_count,
+                                   /*bloom_filter=*/absl::nullopt};
   WatchChangeAggregator aggregator{&metadata_provider};
-
-  SnapshotVersion version;
-  for (const MutableDocument& doc : docs) {
-    HARD_ASSERT(!doc.has_local_mutations(),
-                "Docs from remote updates shouldn't have local changes.");
-    DocumentWatchChange change{added_to_targets, {}, doc.key(), doc};
-    aggregator.HandleDocumentChange(change);
-    version = version > doc.version() ? version : doc.version();
-  }
-
-  return aggregator.CreateRemoteEvent(version);
-}
-
-/** Creates a remote event that inserts a new document. */
-RemoteEvent AddedRemoteEvent(const MutableDocument& doc,
-                             const std::vector<TargetId>& added_to_targets) {
-  std::vector<MutableDocument> docs{doc};
-  return AddedRemoteEvent(docs, added_to_targets);
-}
-
-/** Creates a remote event with changes to a document. */
-RemoteEvent UpdateRemoteEvent(
-    const MutableDocument& doc,
-    const std::vector<TargetId>& updated_in_targets,
-    const std::vector<TargetId>& removed_from_targets) {
-  return UpdateRemoteEventWithLimboTargets(doc, updated_in_targets,
-                                           removed_from_targets, {});
+  ExistenceFilterWatchChange existence_filter_watch_change{existence_filter,
+                                                           target_id};
+  aggregator.HandleExistenceFilter(existence_filter_watch_change);
+  return aggregator.CreateRemoteEvent(testutil::Version(version));
 }
 
 LocalViewChanges TestViewChanges(TargetId target_id,
@@ -204,19 +180,20 @@ LocalViewChanges TestViewChanges(TargetId target_id,
 
 }  // namespace
 
-LocalStoreTest::LocalStoreTest()
-    : test_helper_(GetParam()()),
+LocalStoreTestBase::LocalStoreTestBase(
+    std::unique_ptr<LocalStoreTestHelper>&& test_helper)
+    : test_helper_(std::move(test_helper)),
       persistence_(test_helper_->MakePersistence()),
       local_store_(
           persistence_.get(), &query_engine_, User::Unauthenticated()) {
   local_store_.Start();
 }
 
-void LocalStoreTest::WriteMutation(Mutation mutation) {
+void LocalStoreTestBase::WriteMutation(Mutation mutation) {
   WriteMutations({std::move(mutation)});
 }
 
-void LocalStoreTest::WriteMutations(std::vector<Mutation>&& mutations) {
+void LocalStoreTestBase::WriteMutations(std::vector<Mutation>&& mutations) {
   auto mutations_copy = mutations;
   LocalWriteResult result =
       local_store_.WriteLocally(std::move(mutations_copy));
@@ -225,20 +202,28 @@ void LocalStoreTest::WriteMutations(std::vector<Mutation>&& mutations) {
   last_changes_ = result.changes();
 }
 
-void LocalStoreTest::ApplyRemoteEvent(const RemoteEvent& event) {
+void LocalStoreTestBase::ApplyRemoteEvent(const RemoteEvent& event) {
   last_changes_ = local_store_.ApplyRemoteEvent(event);
 }
 
-void LocalStoreTest::NotifyLocalViewChanges(LocalViewChanges changes) {
+void LocalStoreTestBase::NotifyLocalViewChanges(LocalViewChanges changes) {
   local_store_.NotifyLocalViewChanges(
       std::vector<LocalViewChanges>{std::move(changes)});
 }
 
-void LocalStoreTest::UpdateViews(int target_id, bool from_cache) {
+void LocalStoreTestBase::BackfillIndexes() {
+  local_store_.Backfill();
+}
+
+void LocalStoreTestBase::SetBackfillerMaxDocumentsToProcess(size_t new_max) {
+  local_store_.index_backfiller()->SetMaxDocumentsToProcess(new_max);
+}
+
+void LocalStoreTestBase::UpdateViews(int target_id, bool from_cache) {
   NotifyLocalViewChanges(TestViewChanges(target_id, from_cache, {}, {}));
 }
 
-void LocalStoreTest::AcknowledgeMutationWithVersion(
+void LocalStoreTestBase::AcknowledgeMutationWithVersion(
     int64_t document_version,
     absl::optional<Message<google_firestore_v1_Value>> transform_result) {
   ASSERT_GT(batches_.size(), 0) << "Missing batch to acknowledge.";
@@ -261,140 +246,68 @@ void LocalStoreTest::AcknowledgeMutationWithVersion(
   last_changes_ = local_store_.AcknowledgeBatch(result);
 }
 
-void LocalStoreTest::RejectMutation() {
+void LocalStoreTestBase::RejectMutation() {
   MutationBatch batch = batches_.front();
   batches_.erase(batches_.begin());
   last_changes_ = local_store_.RejectBatch(batch.batch_id());
 }
 
-TargetId LocalStoreTest::AllocateQuery(core::Query query) {
+std::vector<model::FieldIndex> LocalStoreTestBase::GetFieldIndexes() {
+  return local_store_.GetFieldIndexes();
+}
+
+void LocalStoreTestBase::ConfigureFieldIndexes(
+    std::vector<model::FieldIndex>&& new_field_indexes) {
+  local_store_.ConfigureFieldIndexes(std::move(new_field_indexes));
+}
+
+TargetId LocalStoreTestBase::AllocateQuery(core::Query query) {
   TargetData target_data = local_store_.AllocateTarget(query.ToTarget());
   last_target_id_ = target_data.target_id();
   return target_data.target_id();
 }
 
-TargetData LocalStoreTest::GetTargetData(const core::Query& query) {
+TargetData LocalStoreTestBase::GetTargetData(const core::Query& query) {
   return persistence_->Run("GetTargetData", [&] {
     return *local_store_.GetTargetData(query.ToTarget());
   });
 }
 
-QueryResult LocalStoreTest::ExecuteQuery(const core::Query& query) {
+QueryResult LocalStoreTestBase::ExecuteQuery(const core::Query& query) {
   ResetPersistenceStats();
   last_query_result_ =
       local_store_.ExecuteQuery(query, /* use_previous_results= */ true);
   return last_query_result_;
 }
 
-void LocalStoreTest::ApplyBundledDocuments(
+void LocalStoreTestBase::SetIndexAutoCreationEnabled(bool is_enabled) {
+  query_engine_.SetIndexAutoCreationEnabled(is_enabled);
+}
+
+void LocalStoreTestBase::DeleteAllIndexes() const {
+  local_store_.DeleteAllFieldIndexes();
+}
+
+void LocalStoreTestBase::SetMinCollectionSizeToAutoCreateIndex(size_t new_min) {
+  query_engine_.SetIndexAutoCreationMinCollectionSize(new_min);
+}
+
+void LocalStoreTestBase::SetRelativeIndexReadCostPerDocument(double new_cost) {
+  query_engine_.SetRelativeIndexReadCostPerDocument(new_cost);
+}
+
+void LocalStoreTestBase::ApplyBundledDocuments(
     const std::vector<MutableDocument>& documents) {
   last_changes_ =
       local_store_.ApplyBundledDocuments(DocVectorToMap(documents), "");
 }
 
-void LocalStoreTest::ResetPersistenceStats() {
+void LocalStoreTestBase::ResetPersistenceStats() {
   query_engine_.ResetCounts();
 }
 
-/** Asserts that the last target ID is the given number. */
-#define FSTAssertTargetID(target_id)       \
-  do {                                     \
-    ASSERT_EQ(last_target_id_, target_id); \
-  } while (0)
-
-/** Asserts that a the last_changes contain the docs in the given array. */
-#define FSTAssertChanged(...)                               \
-  do {                                                      \
-    std::vector<Document> expected = {__VA_ARGS__};         \
-    ASSERT_EQ(last_changes_.size(), expected.size());       \
-    auto last_changes_list = DocMapToVector(last_changes_); \
-    ASSERT_EQ(last_changes_list, expected);                 \
-    last_changes_ = DocumentMap{};                          \
-  } while (0)
-
-/**
- * Asserts that the last ExecuteQuery results contain the docs in the given
- * array.
- */
-#define FSTAssertQueryReturned(...)                                         \
-  do {                                                                      \
-    std::vector<std::string> expected_keys = {__VA_ARGS__};                 \
-    ASSERT_EQ(last_query_result_.documents().size(), expected_keys.size()); \
-    auto expected_keys_iterator = expected_keys.begin();                    \
-    for (const auto& kv : last_query_result_.documents()) {                 \
-      const DocumentKey& actual_key = kv.first;                             \
-      DocumentKey expected_key = Key(*expected_keys_iterator);              \
-      ASSERT_EQ(actual_key, expected_key);                                  \
-      ++expected_keys_iterator;                                             \
-    }                                                                       \
-    last_query_result_ = QueryResult{};                                     \
-  } while (0)
-
-/** Asserts that the given keys were removed. */
-#define FSTAssertRemoved(...)                             \
-  do {                                                    \
-    std::vector<std::string> key_paths = {__VA_ARGS__};   \
-    ASSERT_EQ(last_changes_.size(), key_paths.size());    \
-    auto key_path_iterator = key_paths.begin();           \
-    for (const auto& kv : last_changes_) {                \
-      const DocumentKey& actual_key = kv.first;           \
-      const Document& value = kv.second;                  \
-      DocumentKey expected_key = Key(*key_path_iterator); \
-      ASSERT_EQ(actual_key, expected_key);                \
-      ASSERT_FALSE(value->is_found_document());           \
-      ++key_path_iterator;                                \
-    }                                                     \
-    last_changes_ = DocumentMap{};                        \
-  } while (0)
-
-/** Asserts that the given local store contains the given document. */
-#define FSTAssertContains(document)                              \
-  do {                                                           \
-    MutableDocument expected = (document);                       \
-    Document actual = local_store_.ReadDocument(expected.key()); \
-    ASSERT_EQ(actual, expected);                                 \
-  } while (0)
-
-/** Asserts that the given local store does not contain the given document. */
-#define FSTAssertNotContains(key_path_string)         \
-  do {                                                \
-    DocumentKey key = Key(key_path_string);           \
-    Document actual = local_store_.ReadDocument(key); \
-    ASSERT_FALSE(actual->is_valid_document());        \
-  } while (0)
-
-/**
- * Asserts the expected numbers of documents read by the RemoteDocumentCache
- * since the last call to `ResetPersistenceStats()`.
- */
-#define FSTAssertRemoteDocumentsRead(by_key, by_query)             \
-  do {                                                             \
-    ASSERT_EQ(query_engine_.documents_read_by_key(), (by_key))     \
-        << "Remote documents read (by key)";                       \
-    ASSERT_EQ(query_engine_.documents_read_by_query(), (by_query)) \
-        << "Remote documents read (by query)";                     \
-  } while (0)
-
-/**
- * Asserts the expected numbers of documents read by the MutationQueue since the
- * last call to `ResetPersistenceStats()`.
- */
-#define FSTAssertMutationsRead(by_key, by_query)                   \
-  do {                                                             \
-    ASSERT_EQ(query_engine_.mutations_read_by_key(), (by_key))     \
-        << "Mutations read (by key)";                              \
-    ASSERT_EQ(query_engine_.mutations_read_by_query(), (by_query)) \
-        << "Mutations read (by query)";                            \
-  } while (0)
-
-/**
- * Asserts the expected document keys mapped to a given target id.
- */
-#define FSTAssertQueryDocumentMapping(target_id, keys)               \
-  do {                                                               \
-    ASSERT_EQ(local_store_.GetRemoteDocumentKeys(target_id), (keys)) \
-        << "Query Document Mapping";                                 \
-  } while (0)
+LocalStoreTest::LocalStoreTest() : LocalStoreTestBase(GetParam()()) {
+}
 
 TEST_P(LocalStoreTest, MutationBatchKeys) {
   Mutation base = testutil::SetMutation("foo/ignore", Map("foo", "bar"));
@@ -558,7 +471,7 @@ TEST_P(LocalStoreTest, HandlesDocumentThenSetMutationThenAckThenDocument) {
 }
 
 TEST_P(LocalStoreTest, HandlesPatchWithoutPriorDocument) {
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar"), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
   FSTAssertRemoved("foo/bar");
   FSTAssertNotContains("foo/bar");
 
@@ -572,7 +485,7 @@ TEST_P(LocalStoreTest, HandlesPatchWithoutPriorDocument) {
 }
 
 TEST_P(LocalStoreTest, HandlesPatchMutationThenDocumentThenAck) {
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar"), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
   FSTAssertRemoved("foo/bar");
   FSTAssertNotContains("foo/bar");
 
@@ -602,7 +515,7 @@ TEST_P(LocalStoreTest, HandlesPatchMutationThenDocumentThenAck) {
 }
 
 TEST_P(LocalStoreTest, HandlesPatchMutationThenAckThenDocument) {
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar"), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
   FSTAssertRemoved("foo/bar");
   FSTAssertNotContains("foo/bar");
 
@@ -628,7 +541,7 @@ TEST_P(LocalStoreTest, HandlesPatchMutationThenAckThenDocument) {
 TEST_P(LocalStoreTest, HandlesDeleteMutationThenAck) {
   WriteMutation(testutil::DeleteMutation("foo/bar"));
   FSTAssertRemoved("foo/bar");
-  FSTAssertContains(DeletedDoc("foo/bar"));
+  FSTAssertContains(DeletedDoc("foo/bar").SetHasLocalMutations());
 
   AcknowledgeMutationWithVersion(1);
   FSTAssertRemoved("foo/bar");
@@ -649,7 +562,7 @@ TEST_P(LocalStoreTest, HandlesDocumentThenDeleteMutationThenAck) {
 
   WriteMutation(testutil::DeleteMutation("foo/bar"));
   FSTAssertRemoved("foo/bar");
-  FSTAssertContains(DeletedDoc("foo/bar"));
+  FSTAssertContains(DeletedDoc("foo/bar").SetHasLocalMutations());
 
   // Remove the target so only the mutation is pinning the document
   local_store_.ReleaseTarget(target_id);
@@ -668,14 +581,14 @@ TEST_P(LocalStoreTest, HandlesDeleteMutationThenDocumentThenAck) {
 
   WriteMutation(testutil::DeleteMutation("foo/bar"));
   FSTAssertRemoved("foo/bar");
-  FSTAssertContains(DeletedDoc("foo/bar"));
+  FSTAssertContains(DeletedDoc("foo/bar").SetHasLocalMutations());
 
   // Add the document to a target so it will remain in persistence even when
   // ack'd
   ApplyRemoteEvent(
       UpdateRemoteEvent(Doc("foo/bar", 1, Map("it", "base")), {target_id}, {}));
   FSTAssertRemoved("foo/bar");
-  FSTAssertContains(DeletedDoc("foo/bar"));
+  FSTAssertContains(DeletedDoc("foo/bar").SetHasLocalMutations());
 
   // Don't need to keep it pinned anymore
   local_store_.ReleaseTarget(target_id);
@@ -718,7 +631,7 @@ TEST_P(LocalStoreTest,
   FSTAssertContains(
       Doc("foo/bar", 0, Map("foo", "old")).SetHasLocalMutations());
 
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar"), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
   FSTAssertChanged(Doc("foo/bar", 0, Map("foo", "bar")).SetHasLocalMutations());
   FSTAssertContains(
       Doc("foo/bar", 0, Map("foo", "bar")).SetHasLocalMutations());
@@ -752,7 +665,7 @@ TEST_P(LocalStoreTest,
 
 TEST_P(LocalStoreTest, HandlesSetMutationAndPatchMutationTogether) {
   WriteMutations({testutil::SetMutation("foo/bar", Map("foo", "old")),
-                  testutil::PatchMutation("foo/bar", Map("foo", "bar"), {})});
+                  testutil::PatchMutation("foo/bar", Map("foo", "bar"))});
 
   FSTAssertChanged(Doc("foo/bar", 0, Map("foo", "bar")).SetHasLocalMutations());
   FSTAssertContains(
@@ -768,7 +681,7 @@ TEST_P(LocalStoreTest, HandlesSetMutationThenPatchMutationThenReject) {
   AcknowledgeMutationWithVersion(1);
   FSTAssertNotContains("foo/bar");
 
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar"), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
   // A blind patch is not visible in the cache
   FSTAssertNotContains("foo/bar");
 
@@ -779,7 +692,7 @@ TEST_P(LocalStoreTest, HandlesSetMutationThenPatchMutationThenReject) {
 TEST_P(LocalStoreTest, HandlesSetMutationsAndPatchMutationOfJustOneTogether) {
   WriteMutations({testutil::SetMutation("foo/bar", Map("foo", "old")),
                   testutil::SetMutation("bar/baz", Map("bar", "baz")),
-                  testutil::PatchMutation("foo/bar", Map("foo", "bar"), {})});
+                  testutil::PatchMutation("foo/bar", Map("foo", "bar"))});
 
   FSTAssertChanged(Doc("bar/baz", 0, Map("bar", "baz")).SetHasLocalMutations(),
                    Doc("foo/bar", 0, Map("foo", "bar")).SetHasLocalMutations());
@@ -792,15 +705,15 @@ TEST_P(LocalStoreTest, HandlesSetMutationsAndPatchMutationOfJustOneTogether) {
 TEST_P(LocalStoreTest, HandlesDeleteMutationThenPatchMutationThenAckThenAck) {
   WriteMutation(testutil::DeleteMutation("foo/bar"));
   FSTAssertRemoved("foo/bar");
-  FSTAssertContains(DeletedDoc("foo/bar"));
+  FSTAssertContains(DeletedDoc("foo/bar").SetHasLocalMutations());
 
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar"), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
   FSTAssertRemoved("foo/bar");
-  FSTAssertContains(DeletedDoc("foo/bar"));
+  FSTAssertContains(DeletedDoc("foo/bar").SetHasLocalMutations());
 
   AcknowledgeMutationWithVersion(2);  // delete mutation
   FSTAssertRemoved("foo/bar");
-  FSTAssertContains(DeletedDoc("foo/bar", 2).SetHasCommittedMutations());
+  FSTAssertContains(DeletedDoc("foo/bar", 0).SetHasLocalMutations());
 
   AcknowledgeMutationWithVersion(3);  // patch mutation
   FSTAssertChanged(UnknownDoc("foo/bar", 3));
@@ -848,7 +761,7 @@ TEST_P(LocalStoreTest, CollectsGarbageAfterAcknowledgedMutation) {
 
   ApplyRemoteEvent(
       UpdateRemoteEvent(Doc("foo/bar", 1, Map("foo", "old")), {target_id}, {}));
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar"), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
   // Release the target so that our target count goes back to 0 and we are
   // considered up-to-date.
   local_store_.ReleaseTarget(target_id);
@@ -859,18 +772,18 @@ TEST_P(LocalStoreTest, CollectsGarbageAfterAcknowledgedMutation) {
       Doc("foo/bar", 1, Map("foo", "bar")).SetHasLocalMutations());
   FSTAssertContains(
       Doc("foo/bah", 0, Map("foo", "bah")).SetHasLocalMutations());
-  FSTAssertContains(DeletedDoc("foo/baz"));
+  FSTAssertContains(DeletedDoc("foo/baz").SetHasLocalMutations());
 
   AcknowledgeMutationWithVersion(3);
   FSTAssertNotContains("foo/bar");
   FSTAssertContains(
       Doc("foo/bah", 0, Map("foo", "bah")).SetHasLocalMutations());
-  FSTAssertContains(DeletedDoc("foo/baz"));
+  FSTAssertContains(DeletedDoc("foo/baz").SetHasLocalMutations());
 
   AcknowledgeMutationWithVersion(4);
   FSTAssertNotContains("foo/bar");
   FSTAssertNotContains("foo/bah");
-  FSTAssertContains(DeletedDoc("foo/baz"));
+  FSTAssertContains(DeletedDoc("foo/baz").SetHasLocalMutations());
 
   AcknowledgeMutationWithVersion(5);
   FSTAssertNotContains("foo/bar");
@@ -886,7 +799,7 @@ TEST_P(LocalStoreTest, CollectsGarbageAfterRejectedMutation) {
 
   ApplyRemoteEvent(
       UpdateRemoteEvent(Doc("foo/bar", 1, Map("foo", "old")), {target_id}, {}));
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar"), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
   // Release the target so that our target count goes back to 0 and we are
   // considered up-to-date.
   local_store_.ReleaseTarget(target_id);
@@ -897,18 +810,18 @@ TEST_P(LocalStoreTest, CollectsGarbageAfterRejectedMutation) {
       Doc("foo/bar", 1, Map("foo", "bar")).SetHasLocalMutations());
   FSTAssertContains(
       Doc("foo/bah", 0, Map("foo", "bah")).SetHasLocalMutations());
-  FSTAssertContains(DeletedDoc("foo/baz"));
+  FSTAssertContains(DeletedDoc("foo/baz").SetHasLocalMutations());
 
   RejectMutation();  // patch mutation
   FSTAssertNotContains("foo/bar");
   FSTAssertContains(
       Doc("foo/bah", 0, Map("foo", "bah")).SetHasLocalMutations());
-  FSTAssertContains(DeletedDoc("foo/baz"));
+  FSTAssertContains(DeletedDoc("foo/baz").SetHasLocalMutations());
 
   RejectMutation();  // set mutation
   FSTAssertNotContains("foo/bar");
   FSTAssertNotContains("foo/bah");
-  FSTAssertContains(DeletedDoc("foo/baz"));
+  FSTAssertContains(DeletedDoc("foo/baz").SetHasLocalMutations());
 
   RejectMutation();  // delete mutation
   FSTAssertNotContains("foo/bar");
@@ -1024,7 +937,9 @@ TEST_P(LocalStoreTest, ReadsAllDocumentsForInitialCollectionQueries) {
   ExecuteQuery(query);
 
   FSTAssertRemoteDocumentsRead(/* by_key= */ 0, /* by_query= */ 2);
-  FSTAssertMutationsRead(/* by_key= */ 0, /* by_query= */ 1);
+  FSTAssertOverlaysRead(/* by_key= */ 0, /* by_query= */ 1);
+  FSTAssertOverlayTypes(
+      OverlayTypeMap({{Key("foo/bonk"), model::Mutation::Type::Set}}));
 }
 
 TEST_P(LocalStoreTest, PersistsResumeTokens) {
@@ -1149,10 +1064,10 @@ TEST_P(LocalStoreTest, UsesTargetMappingToExecuteQueries) {
   AcknowledgeMutationWithVersion(10);
   AcknowledgeMutationWithVersion(10);
 
-  // Execute the query, but note that we read all existing documents from the
+  // Execute the query, but note that we read matching documents from the
   // RemoteDocumentCache since we do not yet have target mapping.
   ExecuteQuery(query);
-  FSTAssertRemoteDocumentsRead(/* by_key */ 0, /* by_query= */ 3);
+  FSTAssertRemoteDocumentsRead(/* by_key */ 0, /* by_query= */ 2);
 
   // Issue a RemoteEvent to persist the target mapping.
   ApplyRemoteEvent(AddedRemoteEvent({Doc("foo/a", 10, Map("matches", true)),
@@ -1166,6 +1081,41 @@ TEST_P(LocalStoreTest, UsesTargetMappingToExecuteQueries) {
   ExecuteQuery(query);
   FSTAssertRemoteDocumentsRead(/* by_key */ 2, /* by_query= */ 0);
   FSTAssertQueryReturned("foo/a", "foo/b");
+}
+
+TEST_P(LocalStoreTest, IgnoresTargetMappingAfterExistenceFilterMismatch) {
+  if (IsGcEager()) return;
+
+  core::Query query =
+      Query("foo").AddingFilter(testutil::Filter("matches", "==", true));
+  TargetId target_id = AllocateQuery(query);
+
+  ExecuteQuery(query);
+
+  // Persist a mapping with a single document
+  ApplyRemoteEvent(
+      AddedRemoteEvent({Doc("foo/a", 10, Map("matches", true))}, {target_id}));
+  ApplyRemoteEvent(NoChangeEvent(target_id, 10));
+  UpdateViews(target_id, /* from_cache= */ false);
+
+  // At this point, we have not yet confirmed that the query is limbo free.
+  TargetData cached_target_data = GetTargetData(query);
+  ASSERT_EQ(testutil::Version(10),
+            cached_target_data.last_limbo_free_snapshot_version());
+
+  // Create an existence filter mismatch and verify that the last limbo free
+  // snapshot version is deleted
+  ApplyRemoteEvent(ExistenceFilterEvent(
+      target_id, DocumentKeySet{testutil::Key("foo/a")}, 2, 20));
+  cached_target_data = GetTargetData(query);
+  ASSERT_EQ(SnapshotVersion::None(),
+            cached_target_data.last_limbo_free_snapshot_version());
+  ASSERT_EQ(ByteString{}, cached_target_data.resume_token());
+
+  // Re-run the query as a collection scan
+  ExecuteQuery(query);
+  FSTAssertRemoteDocumentsRead(/* by_key */ 0, /* by_query= */ 1);
+  FSTAssertQueryReturned("foo/a");
 }
 
 TEST_P(LocalStoreTest, LastLimboFreeSnapshotIsAdvancedDuringViewProcessing) {
@@ -1348,7 +1298,7 @@ TEST_P(LocalStoreTest,
       Doc("foo/bar", 4, Map("sum", 1339)).SetHasCommittedMutations());
 }
 
-TEST_P(LocalStoreTest, HoldsBackOnlyNonIdempotentTransforms) {
+TEST_P(LocalStoreTest, HoldsBackTransforms) {
   core::Query query = Query("foo");
   AllocateQuery(query);
   FSTAssertTargetID(2);
@@ -1366,27 +1316,37 @@ TEST_P(LocalStoreTest, HoldsBackOnlyNonIdempotentTransforms) {
       Doc("foo/bar", 1, Map("sum", 0, "array_union", Array())), {2}));
   FSTAssertChanged(Doc("foo/bar", 1, Map("sum", 0, "array_union", Array())));
 
+  WriteMutation(testutil::PatchMutation(
+      "foo/bar", Map(), {testutil::Increment("sum", Value(1))}));
+  FSTAssertChanged(Doc("foo/bar", 1, Map("sum", 1, "array_union", Array()))
+                       .SetHasLocalMutations());
+
   std::vector<Message<google_firestore_v1_Value>> array_union;
   array_union.push_back(Value("foo"));
-  WriteMutations({
-      testutil::PatchMutation("foo/bar", Map(),
-                              {testutil::Increment("sum", Value(1))}),
-      testutil::PatchMutation(
-          "foo/bar", Map(), {testutil::ArrayUnion("array_union", array_union)}),
-  });
-
+  WriteMutation(testutil::PatchMutation(
+      "foo/bar", Map(), {testutil::ArrayUnion("array_union", array_union)}));
   FSTAssertChanged(Doc("foo/bar", 1, Map("sum", 1, "array_union", Array("foo")))
                        .SetHasLocalMutations());
 
-  // The sum transform is not idempotent and the backend's updated value is
-  // ignored. The ArrayUnion transform is recomputed and includes the backend
-  // value.
+  // The sum transform and array union transform make the SDK ignore the
+  // backend's updated value.
   ApplyRemoteEvent(UpdateRemoteEvent(
       Doc("foo/bar", 2, Map("sum", 1337, "array_union", Array("bar"))), {2},
       {}));
+  FSTAssertChanged(Doc("foo/bar", 2, Map("sum", 1, "array_union", Array("foo")))
+                       .SetHasLocalMutations());
+
+  // With a field transform acknowledgement, the overlay is recalculated with
+  // remaining local mutations.
+  AcknowledgeMutationWithVersion(3, Value(1338));
   FSTAssertChanged(
-      Doc("foo/bar", 2, Map("sum", 1, "array_union", Array("bar", "foo")))
+      Doc("foo/bar", 3, Map("sum", 1338, "array_union", Array("bar", "foo")))
           .SetHasLocalMutations());
+
+  AcknowledgeMutationWithVersion(4, Value("bar"));
+  FSTAssertChanged(
+      Doc("foo/bar", 4, Map("sum", 1338, "array_union", Array("bar", "foo")))
+          .SetHasCommittedMutations());
 }
 
 TEST_P(LocalStoreTest, HandlesMergeMutationWithTransformThenRemoteEvent) {
@@ -1614,7 +1574,7 @@ TEST_P(LocalStoreTest, GetHighestUnacknowledgeBatchId) {
   WriteMutation(testutil::SetMutation("foo/bar", Map("abc", 123)));
   ASSERT_EQ(1, local_store_.GetHighestUnacknowledgedBatchId());
 
-  WriteMutation(testutil::PatchMutation("foo/bar", Map("abc", 321), {}));
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("abc", 321)));
   ASSERT_EQ(2, local_store_.GetHighestUnacknowledgedBatchId());
 
   AcknowledgeMutationWithVersion(1);
@@ -1640,6 +1600,134 @@ TEST_P(LocalStoreTest, OnlyPersistsUpdatesForDocumentsWhenVersionChanges) {
   FSTAssertContains(Doc("foo/bar", 1, Map("val", "old")));
   FSTAssertContains(Doc("foo/baz", 2, Map("val", "new")));
   FSTAssertChanged(Doc("foo/baz", 2, Map("val", "new")));
+}
+
+TEST_P(LocalStoreTest, CanHandleBatchAckWhenPendingBatchesHaveOtherDocs) {
+  // Prepare two batches, the first one will get rejected by the backend.
+  // When the first batch is rejected, overlay is recalculated with only the
+  // second batch, even though it has more documents than what is being
+  // rejected. See: https://github.com/firebase/firebase-android-sdk/issues/3490
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("foo", "bar")));
+  WriteMutations({testutil::SetMutation("foo/bar", Map("foo", "bar-set")),
+                  testutil::SetMutation("foo/another", Map("foo", "another"))});
+
+  RejectMutation();
+  FSTAssertContains(
+      Doc("foo/bar", 0, Map("foo", "bar-set")).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/another", 0, Map("foo", "another")).SetHasLocalMutations());
+}
+
+TEST_P(LocalStoreTest, MultipleFieldPatchesOnRemoteDocs) {
+  core::Query query = Query("foo");
+  AllocateQuery(query);
+  FSTAssertTargetID(2);
+
+  ApplyRemoteEvent(
+      AddedRemoteEvent(Doc("foo/bar", 1, Map("likes", 0, "stars", 0)), {2}));
+  FSTAssertChanged(Doc("foo/bar", 1, Map("likes", 0, "stars", 0)));
+  FSTAssertContains(Doc("foo/bar", 1, Map("likes", 0, "stars", 0)));
+
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("likes", 1)));
+  FSTAssertChanged(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 0)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 0)).SetHasLocalMutations());
+
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("stars", 1)));
+  FSTAssertChanged(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 1)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 1)).SetHasLocalMutations());
+
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("stars", 2)));
+  FSTAssertChanged(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 2)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 2)).SetHasLocalMutations());
+}
+
+TEST_P(LocalStoreTest, MultipleFieldPatchesInOneBatchOnRemoteDocs) {
+  core::Query query = Query("foo");
+  AllocateQuery(query);
+  FSTAssertTargetID(2);
+
+  ApplyRemoteEvent(
+      AddedRemoteEvent(Doc("foo/bar", 1, Map("likes", 0, "stars", 0)), {2}));
+  FSTAssertChanged(Doc("foo/bar", 1, Map("likes", 0, "stars", 0)));
+  FSTAssertContains(Doc("foo/bar", 1, Map("likes", 0, "stars", 0)));
+
+  WriteMutations({testutil::PatchMutation("foo/bar", Map("likes", 1)),
+                  testutil::PatchMutation("foo/bar", Map("stars", 1))});
+  FSTAssertChanged(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 1)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 1)).SetHasLocalMutations());
+
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("stars", 2)));
+  FSTAssertChanged(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 2)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 1, Map("likes", 1, "stars", 2)).SetHasLocalMutations());
+}
+
+TEST_P(LocalStoreTest, MultipleFieldPatchesOnLocalDocs) {
+  WriteMutation(testutil::SetMutation("foo/bar", Map("likes", 0, "stars", 0)));
+  FSTAssertChanged(
+      Doc("foo/bar", 0, Map("likes", 0, "stars", 0)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 0, Map("likes", 0, "stars", 0)).SetHasLocalMutations());
+
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("likes", 1)));
+  FSTAssertChanged(
+      Doc("foo/bar", 0, Map("likes", 1, "stars", 0)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 0, Map("likes", 1, "stars", 0)).SetHasLocalMutations());
+
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("stars", 1)));
+  FSTAssertChanged(
+      Doc("foo/bar", 0, Map("likes", 1, "stars", 1)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 0, Map("likes", 1, "stars", 1)).SetHasLocalMutations());
+
+  WriteMutation(testutil::PatchMutation("foo/bar", Map("stars", 2)));
+  FSTAssertChanged(
+      Doc("foo/bar", 0, Map("likes", 1, "stars", 2)).SetHasLocalMutations());
+  FSTAssertContains(
+      Doc("foo/bar", 0, Map("likes", 1, "stars", 2)).SetHasLocalMutations());
+}
+
+TEST_P(LocalStoreTest, PatchMutationLeadsToPatchOverlay) {
+  AllocateQuery(Query("foo"));
+  ApplyRemoteEvent(UpdateRemoteEvent(Doc("foo/baz", 10, Map("a", 1)), {2}, {}));
+  ApplyRemoteEvent(UpdateRemoteEvent(Doc("foo/bar", 20, Map()), {2}, {}));
+  WriteMutation(testutil::PatchMutation("foo/baz", Map("b", 2)));
+
+  ResetPersistenceStats();
+
+  ExecuteQuery(Query("foo"));
+  FSTAssertRemoteDocumentsRead(0, 2);
+  FSTAssertOverlaysRead(0, 1);
+  FSTAssertOverlayTypes(
+      OverlayTypeMap({{Key("foo/baz"), model::Mutation::Type::Patch}}));
+}
+
+TEST_P(LocalStoreTest, DeeplyNestedTimestampDoesNotCauseStackOverflow) {
+  Timestamp timestamp = Timestamp::Now();
+  Message<_google_firestore_v1_Value> initialServerTimestamp =
+      model::EncodeServerTimestamp(timestamp, absl::nullopt);
+  model::FieldPath path = model::FieldPath::FromDotSeparatedString("timestamp");
+  auto makeDeeplyNestedTimestamp = [&]() {
+    for (int i = 0; i < 1000; ++i) {
+      WriteMutation(testutil::MergeMutation(
+          "foo/bar",
+          Map("timestamp",
+              model::EncodeServerTimestamp(timestamp, *initialServerTimestamp)),
+          {path}, {ServerTimestamp("timestamp")}));
+    }
+  };
+  std::thread t(makeDeeplyNestedTimestamp);
+  EXPECT_NO_FATAL_FAILURE(t.join());
 }
 
 }  // namespace local

@@ -33,6 +33,7 @@
 #import "Crashlytics/UnitTests/Mocks/FIRMockInstallations.h"
 
 NSString *const TestEndpoint = @"https://reports.crashlytics.com";
+NSString *const TestFIID = @"TestFIID";
 
 @interface FIRCLSReportUploaderTests : XCTestCase
 
@@ -44,6 +45,8 @@ NSString *const TestEndpoint = @"https://reports.crashlytics.com";
 // Add mock prefix to names as there are naming conflicts with FIRCLSReportUploaderDelegate
 @property(nonatomic, strong) FIRMockGDTCORTransport *mockDataTransport;
 @property(nonatomic, strong) FIRCLSMockSettings *mockSettings;
+@property(nonatomic, strong) FIRMockInstallations *mockInstallations;
+@property(nonatomic, strong) FIRCLSDataCollectionArbiter *dataArbiter;
 
 @end
 
@@ -59,46 +62,147 @@ NSString *const TestEndpoint = @"https://reports.crashlytics.com";
   self.mockDataTransport = [[FIRMockGDTCORTransport alloc] initWithMappingID:@"1206"
                                                                 transformers:nil
                                                                       target:kGDTCORTargetCSH];
+  self.mockDataTransport.sendDataEvent_wasWritten = YES;
   self.fileManager = [[FIRCLSTempMockFileManager alloc] init];
 
   id fakeApp = [[FIRAppFake alloc] init];
-  FIRCLSDataCollectionArbiter *dataArbiter =
-      [[FIRCLSDataCollectionArbiter alloc] initWithApp:fakeApp withAppInfo:@{}];
-  FIRMockInstallations *mockInstallations =
-      [[FIRMockInstallations alloc] initWithFID:@"test_token"];
+  self.dataArbiter = [[FIRCLSDataCollectionArbiter alloc] initWithApp:fakeApp withAppInfo:@{}];
+  self.mockInstallations = [[FIRMockInstallations alloc] initWithFID:TestFIID];
 
-  self.managerData = [[FIRCLSManagerData alloc] initWithGoogleAppID:@"someGoogleAppId"
-                                                    googleTransport:self.mockDataTransport
-                                                      installations:mockInstallations
-                                                          analytics:nil
-                                                        fileManager:self.fileManager
-                                                        dataArbiter:dataArbiter
-                                                           settings:self.mockSettings];
-
-  self.uploader = [[FIRCLSReportUploader alloc] initWithManagerData:_managerData];
+  [self setupUploaderWithInstallations:self.mockInstallations];
 }
 
 - (void)tearDown {
   self.uploader = nil;
+  [FIRApp resetApps];
 
   [super tearDown];
+}
+
+- (void)setupUploaderWithInstallations:(FIRInstallations *)installations {
+  // Allow nil values only in tests
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnonnull"
+  self.managerData = [[FIRCLSManagerData alloc] initWithGoogleAppID:@"someGoogleAppId"
+                                                    googleTransport:self.mockDataTransport
+                                                      installations:installations
+                                                          analytics:nil
+                                                        fileManager:self.fileManager
+                                                        dataArbiter:self.dataArbiter
+                                                           settings:self.mockSettings
+                                                      onDemandModel:nil];
+#pragma clang diagnostic pop
+
+  self.uploader = [[FIRCLSReportUploader alloc] initWithManagerData:self.managerData];
+}
+
+- (NSString *)resourcePath {
+#if SWIFT_PACKAGE
+  NSBundle *bundle = SWIFTPM_MODULE_BUNDLE;
+  return [bundle.resourcePath stringByAppendingPathComponent:@"Data"];
+#else
+  NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+  return bundle.resourcePath;
+#endif
+}
+
+- (FIRCLSInternalReport *)createReport {
+  NSString *path = [self.fileManager.activePath stringByAppendingPathComponent:@"pkg_uuid"];
+  FIRCLSInternalReport *report = [[FIRCLSInternalReport alloc] initWithPath:path];
+  self.fileManager.moveItemAtPathResult = [NSNumber numberWithInt:1];
+  return report;
 }
 
 #pragma mark - Tests
 
 - (void)testPrepareReport {
-  NSString *path = [self.fileManager.activePath stringByAppendingPathComponent:@"pkg_uuid"];
-  FIRCLSInternalReport *report = [[FIRCLSInternalReport alloc] initWithPath:path];
-  self.fileManager.moveItemAtPathResult = [NSNumber numberWithInt:1];
+  FIRCLSInternalReport *report = [self createReport];
+
+  XCTAssertNil(self.uploader.fiid);
+
+  [self.uploader prepareAndSubmitReport:report
+                    dataCollectionToken:FIRCLSDataCollectionToken.validToken
+                               asUrgent:NO
+                         withProcessing:YES];
+
+  XCTAssertEqual(self.uploader.fiid, TestFIID);
+
+  // Verify with the last move operation is from processing -> prepared
+  XCTAssertTrue(
+      [self.fileManager.moveItemAtPath_destDir containsString:self.fileManager.preparedPath]);
+}
+
+- (void)testPrepareReportOnMainThread {
+  NSString *pathToPlist =
+      [[self resourcePath] stringByAppendingPathComponent:@"GoogleService-Info.plist"];
+  FIROptions *options = [[FIROptions alloc] initWithContentsOfFile:pathToPlist];
+
+  [FIRApp configureWithName:@"__FIRAPP_DEFAULT" options:options];
+  XCTAssertNotNil([FIRApp defaultApp], @"configureWithName must have been initialized");
+
+  FIRInstallations *installations = [FIRInstallations installationsWithApp:[FIRApp defaultApp]];
+  FIRCLSInternalReport *report = [self createReport];
+  [self setupUploaderWithInstallations:installations];
+
+  /*
+   if a report is urgent report will be processed on the Main Thread
+   otherwise, it will be dispatched to a NSOperationQueue (see `FIRCLSExistingReportManager.m:230`)
+
+   This test checks if `prepareAndSubmitReport` finishes in a reasonable time.
+   */
+
+  NSOperationQueue *queue = [NSOperationQueue new];
+
+  // target call will block the main thread, so we need a background thread
+  // that will wait on a semaphore for a timeout
+  dispatch_semaphore_t backgroundWaiter = dispatch_semaphore_create(0);
+  [queue addOperationWithBlock:^{
+    intptr_t result = dispatch_semaphore_wait(backgroundWaiter,
+                                              dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC));
+    BOOL exitBecauseOfTimeout = result != 0;
+    XCTAssertFalse(exitBecauseOfTimeout, @"Main Thread was blocked for more than 1 second");
+  }];
+
+  // Urgent (on the Main thread)
+  [self.uploader prepareAndSubmitReport:report
+                    dataCollectionToken:FIRCLSDataCollectionToken.validToken
+                               asUrgent:YES
+                         withProcessing:YES];
+  dispatch_semaphore_signal(backgroundWaiter);
+
+  // Not urgent (on a background thread)
+  XCTestExpectation *expectation =
+      [self expectationWithDescription:@"wait for a preparation to complete"];
+
+  [queue addOperationWithBlock:^{
+    [self.uploader prepareAndSubmitReport:report
+                      dataCollectionToken:FIRCLSDataCollectionToken.validToken
+                                 asUrgent:YES
+                           withProcessing:YES];
+    [expectation fulfill];
+  }];
+
+  [self waitForExpectationsWithTimeout:1
+                               handler:^(NSError *_Nullable error) {
+                                 XCTAssertNil(error, @"expectations failed: %@", error);
+                               }];
+}
+
+- (void)test_NilFIID_DoesNotCrash {
+  FIRCLSInternalReport *report = [self createReport];
+
+  self.mockInstallations = [[FIRMockInstallations alloc]
+      initWithError:[NSError errorWithDomain:@"TestDomain" code:-1 userInfo:nil]];
+  [self setupUploaderWithInstallations:self.mockInstallations];
+
+  XCTAssertNil(self.uploader.fiid);
 
   [self.uploader prepareAndSubmitReport:report
                     dataCollectionToken:FIRCLSDataCollectionToken.validToken
                                asUrgent:YES
                          withProcessing:YES];
 
-  // Verify with the last move operation is from processing -> prepared
-  XCTAssertTrue(
-      [self.fileManager.moveItemAtPath_destDir containsString:self.fileManager.preparedPath]);
+  XCTAssertNil(self.uploader.fiid);
 }
 
 - (void)testUploadPackagedReportWithPath {
@@ -109,9 +213,39 @@ NSString *const TestEndpoint = @"https://reports.crashlytics.com";
   [self runUploadPackagedReportWithUrgency:YES];
 }
 
-- (void)testUploadPackagedReportWithoutDataCollectionToken {
-  [self setUpForUpload];
+- (void)testUrgentWaitUntillUpload {
+  self.mockDataTransport.async = YES;
 
+  [self runUploadPackagedReportWithUrgency:YES];
+
+  XCTAssertNotNil(self.mockDataTransport.sendDataEvent_event);
+}
+
+- (void)testUrgentWaitUntillUploadWithError {
+  self.mockDataTransport.async = YES;
+  self.mockDataTransport.sendDataEvent_error = [[NSError alloc] initWithDomain:@"domain"
+                                                                          code:1
+                                                                      userInfo:nil];
+
+  [self.uploader uploadPackagedReportAtPath:[self packagePath]
+                        dataCollectionToken:FIRCLSDataCollectionToken.validToken
+                                   asUrgent:YES];
+
+  XCTAssertNotNil(self.mockDataTransport.sendDataEvent_event);
+}
+
+- (void)testUrgentWaitUntillUploadWithWritingError {
+  self.mockDataTransport.async = YES;
+  self.mockDataTransport.sendDataEvent_wasWritten = NO;
+
+  [self.uploader uploadPackagedReportAtPath:[self packagePath]
+                        dataCollectionToken:FIRCLSDataCollectionToken.validToken
+                                   asUrgent:YES];
+
+  XCTAssertNotNil(self.mockDataTransport.sendDataEvent_event);
+}
+
+- (void)testUploadPackagedReportWithoutDataCollectionToken {
   [self.uploader uploadPackagedReportAtPath:[self packagePath] dataCollectionToken:nil asUrgent:NO];
 
   // Ensure we don't hand off an event to GDT
@@ -119,7 +253,6 @@ NSString *const TestEndpoint = @"https://reports.crashlytics.com";
 }
 
 - (void)testUploadPackagedReportNotGDTWritten {
-  [self setUpForUpload];
   self.mockDataTransport.sendDataEvent_wasWritten = NO;
 
   [self.uploader uploadPackagedReportAtPath:[self packagePath] dataCollectionToken:nil asUrgent:NO];
@@ -129,7 +262,6 @@ NSString *const TestEndpoint = @"https://reports.crashlytics.com";
 }
 
 - (void)testUploadPackagedReportGDTError {
-  [self setUpForUpload];
   self.mockDataTransport.sendDataEvent_error = [[NSError alloc] initWithDomain:@"domain"
                                                                           code:1
                                                                       userInfo:nil];
@@ -147,18 +279,12 @@ NSString *const TestEndpoint = @"https://reports.crashlytics.com";
 }
 
 - (void)runUploadPackagedReportWithUrgency:(BOOL)urgent {
-  [self setUpForUpload];
-
   [self.uploader uploadPackagedReportAtPath:[self packagePath]
                         dataCollectionToken:FIRCLSDataCollectionToken.validToken
                                    asUrgent:urgent];
 
   XCTAssertNotNil(self.mockDataTransport.sendDataEvent_event);
   XCTAssertEqualObjects(self.fileManager.removedItemAtPath_path, [self packagePath]);
-}
-
-- (void)setUpForUpload {
-  self.mockDataTransport.sendDataEvent_wasWritten = YES;
 }
 
 @end

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Foundation
 import Combine
-import XCTest
 import FirebaseAuth
+import Foundation
+import XCTest
 
 class UserTests: XCTestCase {
   override class func setUp() {
@@ -66,14 +66,12 @@ class UserTests: XCTestCase {
   fileprivate static let userName = "User Doe"
   fileprivate static let localID = "localId"
   fileprivate static let googleEmail = "user@gmail.com"
-  fileprivate static let googleProfile: [String: String] = {
-    [
-      "iss": "https://accounts.google.com\\",
-      "email": googleEmail,
-      "given_name": "User",
-      "family_name": "Doe",
-    ]
-  }()
+  fileprivate static let googleProfile: [String: String] = [
+    "iss": "https://accounts.google.com\\",
+    "email": googleEmail,
+    "given_name": "User",
+    "family_name": "Doe",
+  ]
 
   class MockGetAccountInfoResponse: FIRGetAccountInfoResponse {
     fileprivate var providerCredentials: ProviderCredentials!
@@ -267,7 +265,7 @@ class UserTests: XCTestCase {
     // when
     Auth.auth()
       .signIn(with: facebookCredential)
-      .flatMap { [weak authBackend] (authResult) -> Future<AuthDataResult, Error> in
+      .flatMap { [weak authBackend] authResult -> Future<AuthDataResult, Error> in
         XCTAssertEqual(authResult.additionalUserInfo?.profile,
                        UserTests.googleProfile as [String: NSString])
         XCTAssertEqual(authResult.additionalUserInfo?.username,
@@ -346,7 +344,7 @@ class UserTests: XCTestCase {
     // when
     Auth.auth()
       .signIn(with: facebookCredential)
-      .flatMap { [weak authBackend] (authResult) -> Future<AuthDataResult, Error> in
+      .flatMap { [weak authBackend] authResult -> Future<AuthDataResult, Error> in
         XCTAssertEqual(authResult.additionalUserInfo?.profile,
                        UserTests.googleProfile as [String: NSString])
         XCTAssertEqual(authResult.additionalUserInfo?.username,
@@ -424,7 +422,7 @@ class UserTests: XCTestCase {
     // when
     Auth.auth()
       .signIn(with: facebookCredential)
-      .flatMap { (authResult) -> Future<AuthDataResult, Error> in
+      .flatMap { authResult -> Future<AuthDataResult, Error> in
         XCTAssertEqual(authResult.additionalUserInfo?.profile,
                        UserTests.googleProfile as [String: NSString])
         XCTAssertEqual(authResult.additionalUserInfo?.username,
@@ -485,7 +483,7 @@ class UserTests: XCTestCase {
     // when
     Auth.auth()
       .signIn(with: facebookCredential)
-      .flatMap { [weak authBackend] (authResult) -> Future<AuthDataResult, Error> in
+      .flatMap { [weak authBackend] authResult -> Future<AuthDataResult, Error> in
         XCTAssertEqual(authResult.additionalUserInfo?.profile,
                        UserTests.googleProfile as [String: NSString])
         XCTAssertEqual(authResult.additionalUserInfo?.username,

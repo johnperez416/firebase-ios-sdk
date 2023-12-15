@@ -18,7 +18,6 @@
 // so the tests may fail. Disable integration tests on macOS so far.
 // TODO: Configure the tests to run on macOS without requesting the keychain password.
 #if !os(OSX)
-
   import FirebaseCore
   import FirebaseMessaging
   import XCTest
@@ -35,14 +34,19 @@
 
   class FIRMessagingTokenRefreshTests: XCTestCase {
     var app: FirebaseApp!
-    var messaging: Messaging?
+    var messaging: Messaging!
 
     override class func setUp() {
-      FirebaseApp.configure()
+      if FirebaseApp.app() == nil {
+        FirebaseApp.configure()
+      }
     }
 
-    override func setUp() {
-      messaging = Messaging.messaging()
+    override func setUpWithError() throws {
+      messaging = try XCTUnwrap(Messaging.messaging())
+      // fake APNS Token
+      messaging.apnsToken = "eb706b132b2f9270faac751e4ceab283f1803b729ac1dd399db3fd2a98bb101b"
+        .data(using: .utf8)
     }
 
     override func tearDown() {
@@ -59,12 +63,9 @@
         handler: nil)
 
       let testDelegate = fakeAppDelegate()
-      messaging?.delegate = testDelegate
+      messaging.delegate = testDelegate
       testDelegate.delegateIsCalled = false
 
-      guard let messaging = self.messaging else {
-        return
-      }
       messaging.deleteFCMToken(forSenderID: tokenAuthorizedEntity(), completion: { error in
         XCTAssertNil(error)
         XCTAssertTrue(testDelegate.delegateIsCalled)
@@ -85,11 +86,28 @@
       let testDelegate = fakeAppDelegate()
       messaging?.delegate = testDelegate
       testDelegate.delegateIsCalled = false
-
-      guard let messaging = self.messaging else {
-        return
-      }
       messaging.deleteToken { error in
+        XCTAssertNil(error)
+        XCTAssertTrue(testDelegate.delegateIsCalled)
+        expectation.fulfill()
+      }
+      wait(for: [expectation, notificationExpectation], timeout: 5)
+    }
+
+    func testDeleteDataWithTokenRefreshDelegatesAndNotifications() {
+      let expectation = self.expectation(description: "delegate method and notification are called")
+      assertDefaultToken()
+
+      let notificationExpectation = self.expectation(forNotification: NSNotification.Name
+        .MessagingRegistrationTokenRefreshed,
+        object: nil,
+        handler: nil)
+
+      let testDelegate = fakeAppDelegate()
+      messaging?.delegate = testDelegate
+      testDelegate.delegateIsCalled = false
+
+      messaging.deleteData { error in
         XCTAssertNil(error)
         XCTAssertTrue(testDelegate.delegateIsCalled)
         expectation.fulfill()
@@ -100,9 +118,7 @@
     // pragma mark - Helpers
     func assertTokenWithAuthorizedEntity() {
       let expectation = self.expectation(description: "tokenWithAuthorizedEntity")
-      guard let messaging = self.messaging else {
-        return
-      }
+
       messaging.retrieveFCMToken(forSenderID: tokenAuthorizedEntity()) { token, error in
         XCTAssertNil(error)
         XCTAssertNotNil(token)
@@ -113,9 +129,7 @@
 
     func assertDefaultToken() {
       let expectation = self.expectation(description: "getToken")
-      guard let messaging = self.messaging else {
-        return
-      }
+
       messaging.token { token, error in
         XCTAssertNil(error)
         XCTAssertNotNil(token)

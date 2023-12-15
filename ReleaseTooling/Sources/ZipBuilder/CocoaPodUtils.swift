@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
+import FirebaseManifest
 import Foundation
 import Utils
-import FirebaseManifest
 
 /// CocoaPod related utility functions. The enum type is used as a namespace here instead of having
 /// root functions, and no cases should be added to it.
@@ -73,12 +73,11 @@ enum CocoaPodUtils {
 
     /// The debug description as required by `CustomDebugStringConvertible`.
     var debugDescription: String {
-      var desc = name
       if let version = version {
-        desc.append(" v\(version)")
+        return "\(name) v\(version)"
+      } else {
+        return name
       }
-
-      return desc
     }
   }
 
@@ -137,8 +136,9 @@ enum CocoaPodUtils {
     let result = Shell.executeCommandFromScript("pod cache clean --all", outputToConsole: false)
     switch result {
     case let .error(code, _):
-      fatalError("Could not clean the pod cache, the command exited with \(code). Try running the" +
-        "command in Terminal to see what's wrong.")
+      fatalError("Could not clean the pod cache, the command exited with " +
+        "\(code). Try running the command in Terminal to see " +
+        "what's wrong.")
     case .success:
       // No need to do anything else, continue on.
       print("Successfully cleaned pod cache.")
@@ -164,7 +164,8 @@ enum CocoaPodUtils {
                                       localPodspecPath: localPodspecPath)
   }
 
-  /// Install an array of pods in a specific directory, returning a dictionary of PodInfo for each pod
+  /// Install an array of pods in a specific directory, returning a dictionary of PodInfo for each
+  /// pod
   /// that was installed.
   /// - Parameters:
   ///   - pods: List of VersionedPods to install
@@ -414,10 +415,12 @@ enum CocoaPodUtils {
   /// - Returns: A tuple of the framework and version, if it can be parsed.
   private static func detectVersion(fromLine input: String)
     -> (framework: String, version: String)? {
-    // Get the components of the line to parse them individually. Ignore any whitespace only Strings.
+    // Get the components of the line to parse them individually. Ignore any whitespace only
+    // Strings.
     let components = input.components(separatedBy: " ").filter { !$0.isEmpty }
 
-    // Expect three components: the `-`, the pod name, and the version in parens. This will filter out
+    // Expect three components: the `-`, the pod name, and the version in parens. This will filter
+    // out
     // dependencies that have version requirements like `(~> 3.2.1)` in it.
     guard components.count == 3 else { return nil }
 
@@ -446,7 +449,7 @@ enum CocoaPodUtils {
                                       localPodspecPath: URL?,
                                       linkage: LinkageType) -> String {
     // Start assembling the Podfile.
-    var podfile: String = ""
+    var podfile = ""
 
     // If custom Specs repos were passed in, prefix the Podfile with the custom repos followed by
     // the CocoaPods master Specs repo.
@@ -481,20 +484,22 @@ enum CocoaPodUtils {
 
     // Loop through the subspecs passed in and use the actual Pod name.
     for pod in pods {
-      let podspec = String(pod.name.split(separator: "/")[0] + ".podspec")
+      let rootPod = String(pod.name.split(separator: "/").first!)
+
       // Check if we want to use a local version of the podspec.
       if let localURL = localPodspecPath,
-        FileManager.default.fileExists(atPath: localURL.appendingPathComponent(podspec).path) {
+         let pathURL = localPodspecPath?.appendingPathComponent("\(rootPod).podspec").path,
+         FileManager.default.fileExists(atPath: pathURL),
+         isSourcePodspec(pathURL) {
         podfile += "  pod '\(pod.name)', :path => '\(localURL.path)'"
       } else if let podVersion = pod.version {
         // To support Firebase patch versions in the Firebase zip distribution, allow patch updates
-        // for all pods except Firebase and FirebaseCore. The Firebase Swift pods are not yet in the
-        // zip distribution.
+        // for all pods except Firebase and FirebaseCore.
         var podfileVersion = podVersion
         if pod.name.starts(with: "Firebase"),
-          !pod.name.hasSuffix("Swift"),
-          pod.name != "Firebase",
-          pod.name != "FirebaseCore" {
+           !pod.name.hasSuffix("Swift"),
+           pod.name != "Firebase",
+           pod.name != "FirebaseCore" {
           podfileVersion = podfileVersion.replacingOccurrences(
             of: firebaseVersion,
             with: minorVersion
@@ -503,9 +508,9 @@ enum CocoaPodUtils {
         }
         podfile += "  pod '\(pod.name)', '\(podfileVersion)'"
       } else if pod.name.starts(with: "Firebase"),
-        let localURL = localPodspecPath,
-        FileManager.default
-        .fileExists(atPath: localURL.appendingPathComponent("Firebase.podspec").path) {
+                let localURL = localPodspecPath,
+                FileManager.default
+                .fileExists(atPath: localURL.appendingPathComponent("Firebase.podspec").path) {
         // Let Firebase.podspec force the right version for unspecified closed Firebase pods.
         let podString = pod.name.replacingOccurrences(of: "Firebase", with: "")
         podfile += "  pod 'Firebase/\(podString)', :path => '\(localURL.path)'"
@@ -528,8 +533,12 @@ enum CocoaPodUtils {
       let podspecs = try! FileManager.default.contentsOfDirectory(atPath: localURL.path)
       for podspec in podspecs {
         if podspec == "FirebaseInstallations.podspec" ||
-          podspec == "FirebaseCoreDiagnostics.podspec" ||
           podspec == "FirebaseCore.podspec" ||
+          podspec == "FirebaseCoreExtension.podspec" ||
+          podspec == "FirebaseCoreInternal.podspec" ||
+          podspec == "FirebaseAppCheck.podspec" ||
+          podspec == "FirebaseAuth.podspec" ||
+          podspec == "FirebaseMessaging.podspec" ||
           podspec == "FirebaseRemoteConfig.podspec" ||
           podspec == "FirebaseABTesting.podspec" {
           let podName = podspec.replacingOccurrences(of: ".podspec", with: "")
@@ -539,6 +548,16 @@ enum CocoaPodUtils {
     }
     podfile += "end"
     return podfile
+  }
+
+  private static func isSourcePodspec(_ podspecPath: String) -> Bool {
+    do {
+      let contents = try String(contentsOfFile: podspecPath, encoding: .utf8)
+      // The presence of ".vendored_frameworks" in a podspec indicates a binary pod.
+      return contents.range(of: ".vendored_frameworks") == nil
+    } catch {
+      fatalError("Could not read \(podspecPath): \(error)")
+    }
   }
 
   /// Write a podfile that contains all the pods passed in to the directory passed in with a name

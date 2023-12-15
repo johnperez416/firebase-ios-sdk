@@ -19,7 +19,7 @@ import Foundation
 import FirebaseManifest
 import Utils
 
-struct InitializeRelease {
+enum InitializeRelease {
   static func setupRepo(gitRoot: URL) -> String {
     let manifest = FirebaseManifest.shared
     let branch = createVersionBranch(path: gitRoot, version: manifest.version)
@@ -45,33 +45,18 @@ struct InitializeRelease {
   private static func updatePodspecs(path: URL, manifest: FirebaseManifest.Manifest) {
     for pod in manifest.pods {
       let version = manifest.versionString(pod)
-      if !pod.isClosedSource {
-        if pod.name == "Firebase" {
-          updateFirebasePodspec(path: path, manifest: manifest)
-        } else {
-          // Patch the new version to the podspec's version attribute.
-          Shell.executeCommand("sed -i.bak -e \"s/\\(\\.version.*=[[:space:]]*'\\).*'/\\1" +
-            "\(version)'/\" \(pod.name).podspec", workingDir: path)
-        }
+      if pod.name == "Firebase" {
+        updateFirebasePodspec(path: path, manifest: manifest)
       } else {
-        let fileName = "\(pod.name).podspec.json"
+        let scripts: String = [
+          // Pods depending on GoogleAppMeasurement specs should pin the
+          // dependency to the new version.
+          #"-e "s|(\.dependency 'GoogleAppMeasurement/?.*',).*|\1 '\#(version)'|""#,
+          // Replace the pod's `version` attribute with the new version.
+          #"-e "s|(\.version.*=[[:space:]]*) '.*|\1 '\#(version)'|""#,
+        ].joined(separator: " ")
 
-        // These are the keys in the `*.podspec.json` files that map to a
-        // semantic version that needs to be bumped.
-        let versionedKeys = [
-          "GoogleAppMeasurement",
-          "GoogleAppMeasurement/WithoutAdIdSupport",
-          "version",
-        ]
-
-        let scripts: [String] = versionedKeys.map { key in
-          let pattern = #""\#(key)": ".*""#
-          let replace = #""\#(key)": "\#(version)""#
-          let script = "-e 's|\(pattern)|\(replace)|'"
-          return script
-        }
-
-        let command = "sed -i.bak \(scripts.joined(separator: " ")) \(fileName)"
+        let command = "sed -i.bak -E \(scripts) \(pod.podspecName())"
         Shell.executeCommand(command, workingDir: path)
       }
     }
@@ -116,7 +101,8 @@ struct InitializeRelease {
     }
   }
 
-  /// Update the existing version to the given version by writing to a given string using the provided range.
+  /// Update the existing version to the given version by writing to a given string using the
+  /// provided range.
   /// - Parameters:
   ///   - contents: A reference to a String containing a version that will be updated.
   ///   - range: The range containing a version substring that will be updated.

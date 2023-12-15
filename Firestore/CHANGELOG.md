@@ -1,41 +1,172 @@
-# v8.9.1
+# 10.19.0
+- [fixed] Made an optimization to the synchronization logic for resumed queries
+  to only re-download locally-cached documents that are known to be out-of-sync. (#12044)
+
+# 10.18.0
+- [fixed] Fix Firestore build for visionOS on Xcode 15.1. (#12023)
+
+# 10.17.0
+- [feature] Add support for sum and average aggregate queries.
+- [feature] The `FirebaseFirestore` module now contains Firebase Firestore's
+  Swift-only APIs that were previously only available via the
+  `FirebaseFirestoreSwift` extension SDK. See the
+  `FirebaseFirestoreSwift` release note from this release for more details.
+
+# 10.16.0
+- [fixed] Fixed an issue where Firestore's binary SwiftPM distribution would
+  not link properly when building a target for testing. This issue affected
+  Xcode 15 Beta 5 and later (#11656).
+- [fixed] Downgrade the CocoaPods grpc dependency back to 1.44.0 (from 1.50.1)
+  to fix a crash on iOS 12 devices that was introduced in the Firebase Apple SDK
+  10.10.0 when the grpc dependency was upgraded (#11509).
+
+# 10.15.0
+- [feature] Add the option to allow the SDK to create cache indexes automatically to
+  improve query execution locally. (#11596)
+
+# 10.12.0
+- [feature] Implemented an optimization in the local cache synchronization logic
+  that reduces the number of billed document reads when documents were deleted
+  on the server while the client was not actively listening to the query
+  (e.g. while the client was offline). (#11457)
+- [added] Developers using Firestore on **visionOS** must use a source
+  Firestore distribution rather than the default binary distribution. To do
+  this, quit Xcode and open the desired project from the command line
+  with the `FIREBASE_SOURCE_FIRESTORE` environment variable:
+  ```
+  open --env FIREBASE_SOURCE_FIRESTORE /path/to/project.xcodeproj
+  ```
+  To go back to using the binary distribution of Firestore, quit Xcode and
+  open Xcode like normal, without the environment variable. (#11492)
+
+# 10.11.0
+- [feature] Expose MultiDb API for public preview. (#10465)
+- [fixed] Fixed a compilation warning related to integer casting. (#11332)
+- [fixed] Allow initializing FIRLocalCacheSettings with unlimited size. (#11405)
+
+# 10.9.0
+- [feature] Add new cache config API to customize SDK cache settings.
+- [feature] Add LRU garbage collector as an option to memory cache.
+
+# 10.8.0
+- [feature] Change Firestore's Swift Package Manager distribution from source
+  to binary to reduce the time it takes to add the Firebase package and to
+  build the Firestore SDK (#6564).
+- [fixed] Fixed SSL symbol collision issue affecting SwiftPM users. (#6869)
+
+# 10.7.0
+- [feature] Add support for disjunctions in queries (`OR` queries).
+- [fixed] Fixed stack overflow caused by deeply nested server timestamps.
+
+# 10.6.0
+- [fixed] Fix a potential high memory usage issue.
+
+# 10.5.0
+- [fixed] Add @discardableResult to addDocument API for easy handling unused return value. (#10640)
+
+# 10.4.0
+- [fixed] Fix an issue that stops some performance optimization being applied (#10579).
+
+# 10.3.0
+- [feature] Add MultiDb support.
+- [fixed] Fix App crashed when there are nested data structures inside IN
+  Filter (#10507).
+
+# 10.2.0
+- [fixed] Fix FAILED_PRECONDITION when writing to a deleted document in a
+  transaction (#10431).
+- [fixed] Fixed data race in credentials provider (#10393).
+- [fixed] Fix Firestore failing to raise initial snapshot from empty local cache
+  result (#10437).
+
+# 10.0.0
+- [feature] Added `Query.count()`, which fetches the number of documents in the
+  result set without actually downloading the documents (#10246).
+- [fixed] Fixed compiler warning about `@param comparator` (#10226).
+
+# 9.6.0
+- [added] Expose client side indexing feature with `FIRFirestore.setIndexConfigurationFromJSON` and
+  `FIRFirestore.setIndexConfigurationFromStream` (#10090).
+- [fixed] Fixed high CPU usage whenever Firestore was in use (#10168).
+
+# 9.5.0
+- [fixed] Fixed an intermittent crash if `ListenerRegistration::Remove()` was
+  invoked concurrently (#10065).
+- [fixed] Fixed a crash if multiple large write batches with overlapping
+  documents were executed where at least one batch performed a delete operation
+  (#9965).
+
+# 9.4.0
+- [fixed] Fixed a crash during app start (#9985, #10018).
+
+# 9.2.0
+- [feature] Added `TransactionOptions` to control how many times a transaction
+  will retry commits before failing (#9838).
+
+# 9.0.0
+- [fixed] Fixed CMake build errors when building with Xcode 13.3.1 (#9702).
+- [fixed] **Breaking change:** Fixed an issue where returning `nil` from the
+  update closure when running a transaction caused a crash in Swift by removing
+  the auto-generated `async throw`ing method from the `FirebaseFirestore`
+  module. In order to use the `async throw`ing transaction method, add the
+  `FirebaseFirestoreSwift` module dependency to your build target (#9426).
+
+# 8.15.0
+- [changed] Potentially fixed a crash during application exit caused by an
+  assertion about ordering documents by missing fields (#9258).
+- [changed] Add more details to the assertion failure in Query::Comparator() to
+  help with future debugging (#9258).
+
+# 8.14.0
+- [fixed] Fixed compiler warnings in `local_serializer.cc` about "implicit
+  conversion loses integer precision" that were introduced in 8.13.0 (#9430).
+
+# 8.12.1
+- [changed] Add more details to the assertion failure in OrderBy::Compare() to
+  help with future debugging (#9258).
+
+# 8.11.0
+- [fixed] Fixed an issue that can result in incomplete Query snapshots when an
+  app is backgrounded during query execution.
+
+# 8.9.1
 - [fixed] Fixed a bug in the AppCheck integration that caused the SDK to respond
   to unrelated notifications (#8895).
 
-# v8.9.0
+# 8.9.0
 - [added] Added support for Firebase AppCheck.
 - [fixed] Fix a crash if `[FIRTransaction getDocument]` was called after
   `[FIRFirestore terminateWithCompletion]` (#8760).
 - [fixed] Fixed a performance issue due to repeated schema migrations
   at app startup (#8791).
 
-# v8.6.0
+# 8.6.0
 - [changed] Internal refactor to improve serialization performance.
 - [changed] `DocumentSnapshot` objects consider the document's key and data for
   equality comparison, but ignore the internal state and internal version.
 
-# v8.4.0
+# 8.4.0
 - [fixed] Fixed handling of Unicode characters in log and assertion messages
   (#8372).
 
-# v8.2.0
+# 8.2.0
 - [changed] Passing in an empty document ID, collection group ID, or collection
   path will now result in a more readable error (#8218).
 
-# v7.9.0
+# 7.9.0
 - [feature] Added support for Firestore Bundles via
   `FIRFirestore.loadBundle`, `FIRFirestore.loadBundleStream` and
   `FIRFirestore.getQueryNamed`. Bundles contain pre-packaged data produced
   with the Server SDKs and can be used to populate Firestore's cache
   without reading documents from the backend.
 
-# v7.7.0
+# 7.7.0
 - [fixed] Fixed a crash that could happen when the App is being deleted and
   there's an active listener (#6909).
 - [fixed] Fixed a bug where local cache inconsistencies were unnecessarily
   being resolved (#7455).
 
-# v7.5.0
+# 7.5.0
 - [changed] A write to a document that contains FieldValue transforms is no
   longer split up into two separate operations. This reduces the number of
   writes the backend performs and allows each WriteBatch to hold 500 writes
@@ -44,15 +175,15 @@
   delete the first occurrence of an element in an array in a latency
   compensated snapshots.
 
-# v7.3.0
+# 7.3.0
 - [fixed] Fixed a crash that could happen when the SDK encountered invalid
   data during garbage collection (#6721).
 
-# v7.2.0
+# 7.2.0
 - [added] Made emulator connection API consistent between Auth, Database,
   Firestore, and Functions (#5916).
 
-# v7.1.0
+# 7.1.0
 - [changed] Added the original query data to error messages for Queries that
   cannot be deserizialized.
 - [fixed] Remove explicit MobileCoreServices library linkage from podspec
@@ -62,7 +193,7 @@
   accepted null and NaN for all operators, even though this isn't necessarily
   useful.
 
-# v7.0.0
+# 7.0.0
 - [changed] **Breaking change:** Removed the `areTimestampsInSnapshotsEnabled`
   setting. Timestamp fields that read from a `FIRDocumentSnapshot` now always
   return `FIRTimestamp` objects. Use `FIRTimestamp.dateValue` to convert to
@@ -70,13 +201,13 @@
 - [fixed] Fixed a memory leak introduced in 1.18.0 that may manifest when
   serializing queries containing equality or non-equality comparisons.
 
-# v1.19.0
+# 1.19.0
 - [changed] Internal improvements for future C++ and Unity support. Includes a
   breaking change for the Firestore C++ Alpha SDK, but does not affect
   Objective-C or Swift users.
 - [changed] Added new internal HTTP headers to the gRPC connection.
 
-# v1.18.0
+# 1.18.0
 - [feature] Added `whereField(_:notIn:)` and `whereField(_:isNotEqualTo:)` query
   operators. `whereField(_:notIn:)` finds documents where a specified field’s
   value is not in a specified array. `whereField(_:isNotEqualTo:)` finds
@@ -84,25 +215,25 @@
   Neither query operator will match documents where the specified field is not
   present.
 
-# v1.17.1
+# 1.17.1
 - [fixed] Fix gRPC documentation warning surfaced in Xcode (#6340).
 
-# v1.17.0
+# 1.17.0
 - [changed] Internal improvements for future C++ and Unity support.
 
-# v1.16.4
+# 1.16.4
 - [changed] Rearranged public headers for future Swift Package Manager support.
   This should have no impact existing users of CocoaPods, Carthage, or zip file
   distributions.
 
-# v1.16.3
+# 1.16.3
 - [changed] Internal improvements for future C++ and Unity support.
 
-# v1.16.2
+# 1.16.2
 - [fixed] Fixed a configuration issue where listeners were no longer being
   called back on the main thread by default.
 
-# v1.16.1
+# 1.16.1
 - [fixed] Removed a delay that may have prevented Firestore from immediately
   establishing a network connection if a connectivity change occurred while
   the app was in the background (#5783).
@@ -110,21 +241,21 @@
   process for old documents in the cache happened to run during a LevelDB
   compaction (#5881).
 
-# v1.16.0
+# 1.16.0
 - [fixed] Fixed an issue that may have prevented the client from connecting
   to the backend immediately after a user signed in.
 
-# v1.15.0
+# 1.15.0
 - [changed] Internal improvements for future C++ and Unity support. Includes a
   breaking change for the Firestore C++ Alpha SDK, but does not affect
   Objective-C or Swift users.
 
-# v1.14.0
+# 1.14.0
 - [changed] Internal improvements for future C++ and Unity support. Includes a
   breaking change for the Firestore C++ Alpha SDK, but does not affect
   Objective-C or Swift users.
 
-# v1.13.0
+# 1.13.0
 - [changed] Firestore now limits the number of concurrent document lookups it
   will perform when resolving inconsistencies in the local cache
   (https://github.com/firebase/firebase-js-sdk/issues/2683).
@@ -132,32 +263,32 @@
 - [fixed] Firestore will now send Auth credentials to the Firestore Emulator
   (#5072).
 
-# v1.12.1
+# 1.12.1
 - [changed] Internal improvements for future C++ and Unity support.
 
-# v1.12.0
+# 1.12.0
 - [changed] Internal improvements for future C++ and Unity support. Includes a
   breaking change for the Firestore C++ Alpha SDK, but does not affect
   Objective-C or Swift users.
 
-# v1.11.2
+# 1.11.2
 - [fixed] Fixed the FirebaseFirestore podspec to properly declare its
   dependency on the UIKit framework on iOS and tvOS.
 
-# v1.11.1
+# 1.11.1
 - [fixed] Firestore should now recover its connection to the server more
   quickly after returning from the background (#4905).
 
-# v1.11.0
+# 1.11.0
 - [changed] Improved performance of queries with large result sets.
 
-# v1.10.2
+# 1.10.2
 - [changed] Internal improvements.
 
-# v1.10.1
+# 1.10.1
 - [changed] Internal improvements.
 
-# v1.10.0
+# 1.10.0
 - [feature] Firestore previously required that every document read in a
   transaction must also be written. This requirement has been removed, and
   you can now read a document in a transaction without writing to it.
@@ -173,31 +304,31 @@
   user to appear to lose data, since older versions of the SDK can't read data
   from the new location (#843).
 
-# v1.9.0
+# 1.9.0
 - [feature] Added a `limit(toLast:)` query operator, which returns the last
   matching documents up to the given limit.
 
-# v1.8.3
+# 1.8.3
 - [changed] Internal improvements.
 
-# v1.8.2
+# 1.8.2
 - [changed] Internal improvements.
 
-# v1.8.1
+# 1.8.1
 - [fixed] Firestore no longer loads its TLS certificates from a bundle, which
   fixes crashes at startup when the bundle can't be loaded. This fixes a
   specific case where the bundle couldn't be loaded due to international
   characters in the application name. If you're manually tracking dependencies,
   you can now remove `gRPCCertificates-Cpp.bundle` from your build. (#3951).
 
-# v1.8.0
+# 1.8.0
 - [changed] Removed Firestore's dependency on the `Protobuf` CocoaPod. If
   you're manually tracking dependencies, you may be able to remove it from your
   build (note, however, that other Firebase components may still require it).
 - [changed] Added a dependency on the `abseil` CocoaPod. If you're manually
   tracking dependencies, you need to add it to your build.
 
-# v1.7.0
+# 1.7.0
 - [feature] Added `whereField(_:in:)` and `whereField(_:arrayContainsAny:)` query
   operators. `whereField(_:in:)` finds documents where a specified field’s value
   is IN a specified array. `whereField(_:arrayContainsAny:)` finds documents
@@ -210,20 +341,20 @@
   persistence](https://github.com/firebase/firebase-ios-sdk/issues/new) that you
   experience.
 
-# v1.6.1
+# 1.6.1
 - [fixed] Fixed a race condition that could cause a segmentation fault during
   client initialization.
 
-# v1.6.0
+# 1.6.0
 - [feature] Added an `addSnapshotsInSyncListener()` method to
   `FIRFirestore` that notifies you when all your snapshot listeners are
   in sync with each other.
 
-# v1.5.1
+# 1.5.1
 - [fixed] Fixed a memory access error discovered using the sanitizers in Xcode
   11.
 
-# v1.5.0
+# 1.5.0
 - [changed] Transactions now perform exponential backoff before retrying.
   This means transactions on highly contended documents are more likely to
   succeed.
@@ -235,20 +366,20 @@
   optionally call `clearPersistence()` to wipe persisted Firestore data
   from disk.
 
-# v1.4.5
+# 1.4.5
 - [fixed] Fixed a crash that would happen when changing networks or going from
   online to offline. (#3661).
 
-# v1.4.4
+# 1.4.4
 - [changed] Internal improvements.
 
-# v1.4.3
+# 1.4.3
 - [changed] Transactions are now more flexible. Some sequences of operations
   that were previously incorrectly disallowed are now allowed. For example,
   after reading a document that doesn't exist, you can now set it multiple
   times successfully in a transaction.
 
-# v1.4.2
+# 1.4.2
 - [fixed] Fixed an issue where query results were temporarily missing documents
   that previously had not matched but had been updated to now match the query
   (https://github.com/firebase/firebase-android-sdk/issues/155).
@@ -261,16 +392,16 @@
 - [changed] Failed transactions now return the failure from the last attempt,
   instead of `ABORTED`.
 
-# v1.4.1
+# 1.4.1
 - [fixed] Fixed certificate loading for non-CocoaPods builds that may not
   include bundle identifiers in their frameworks or apps (#3184).
 
-# v1.4.0
+# 1.4.0
 - [feature] Added `clearPersistence()`, which clears the persistent storage
   including pending writes and cached documents. This is intended to help
   write reliable tests (https://github.com/firebase/firebase-js-sdk/issues/449).
 
-# v1.3.2
+# 1.3.2
 - [fixed] Firestore should now recover its connection to the server more
   quickly after being on a network suffering from total packet loss (#2987).
 - [fixed] Changed gRPC-C++ dependency to 0.0.9 which adds support for using it
@@ -278,7 +409,7 @@
   errors you might encounter when trying to use Firestore and other Google
   Cloud Objective-C APIs in the same project.
 
-# v1.3.1
+# 1.3.1
 - [fixed] Disabling garbage collection now avoids even scheduling the
   collection process. This can be used to prevent crashes in the background when
   using `NSFileProtectionComplete`. Note that Firestore does not support
@@ -286,20 +417,20 @@
   protection is enabled. This change just prevents a crash when Firestore is
   idle (#2846).
 
-# v1.3.0
+# 1.3.0
 - [feature] You can now query across all collections in your database with a
   given collection ID using the `Firestore.collectionGroup()` method.
 - [feature] Added community support for tvOS.
 
-# v1.2.1
+# 1.2.1
 - [fixed] Fixed a use-after-free bug that could be observed when using snapshot
   listeners on temporary document references (#2682).
 
-# v1.2.0
+# 1.2.0
 - [feature] Added community support for macOS (#434).
 - [fixed] Fixed the way gRPC certificates are loaded on macOS (#2604).
 
-# v1.1.0
+# 1.1.0
 - [feature] Added `FieldValue.increment()`, which can be used in
   `updateData(_:)` and `setData(_:merge:)` to increment or decrement numeric
   field values safely without transactions.
@@ -309,13 +440,13 @@
   While this feature is not yet available, all schema changes are included
   in this release.
 
-# v1.0.2
+# 1.0.2
 - [changed] Internal improvements.
 
-# v1.0.1
+# 1.0.1
 - [changed] Internal improvements.
 
-# v1.0.0
+# 1.0.0
 - [changed] **Breaking change:** The `areTimestampsInSnapshotsEnabled` setting
   is now enabled by default. Timestamp fields that read from a
   `FIRDocumentSnapshot` will be returned as `FIRTimestamp` objects instead of
@@ -337,7 +468,7 @@
   instructions](https://github.com/firebase/firebase-ios-sdk/blob/master/Carthage.md)
   to get `gRPCCertificates.bundle` from the correct location.
 
-# v0.16.1
+# 0.16.1
 - [fixed] Offline persistence now properly records schema downgrades. This is a
   forward-looking change that allows all subsequent versions to safely downgrade
   to this version. Some other versions might be safe to downgrade to, if you can
@@ -347,7 +478,7 @@
 - [fixed] Fixed an issue where gRPC would crash if shut down multiple times
   (#2146).
 
-# v0.16.0
+# 0.16.0
 - [changed] Added a garbage collection process to on-disk persistence that
   removes older documents. This is enabled by default, and the SDK will attempt
   to periodically clean up older, unused documents once the on-disk cache passes
@@ -356,7 +487,7 @@
   1 MB. The garbage collection process can be disabled entirely by setting
   `FIRFirestoreSettings.cacheSizeBytes` to `kFIRFirestoreCacheSizeUnlimited`.
 
-# v0.15.0
+# 0.15.0
 - [changed] Changed how the SDK handles locally-updated documents while syncing
   those updates with Cloud Firestore servers. This can lead to slight behavior
   changes and may affect the `SnapshotMetadata.hasPendingWrites` metadata flag.
@@ -370,18 +501,18 @@
   behavior](https://github.com/firebase/firebase-ios-sdk/issues/new) you
   experience. (#1968)
 
-# v0.14.0
+# 0.14.0
 - [fixed] Fixed compilation in C99 and C++11 modes without GNU extensions.
 
-# v0.13.6
+# 0.13.6
 - [changed] Internal improvements.
 
-# v0.13.5
+# 0.13.5
 - [changed] Some SDK errors that represent common mistakes (such as permission
   denied or a missing index) will automatically be logged as a warning in
   addition to being surfaced via the API.
 
-# v0.13.4
+# 0.13.4
 - [fixed] Fixed an issue where the first `get()` call made after being offline
   could incorrectly return cached data without attempting to reach the backend.
 - [changed] Changed `get()` to only make one attempt to reach the backend before
@@ -389,21 +520,21 @@
 - [fixed] Fixed an issue that caused Firebase to drop empty objects from calls
   to `setData(..., merge:true)`.
 
-# v0.13.3
+# 0.13.3
 - [changed] Internal improvements.
 
-# v0.13.2
+# 0.13.2
 - [fixed] Fixed an issue where changes to custom authentication claims did not
   take effect until you did a full sign-out and sign-in. (#1499)
 - [changed] Improved how Firestore handles idle queries to reduce the cost of
   re-listening within 30 minutes.
 
-# v0.13.1
+# 0.13.1
 - [fixed] Fixed an issue where `get(source:.Cache)` could throw an
   "unrecognized selector" error if the SDK has previously cached the
   non-existence of the document (#1632).
 
-# v0.13.0
+# 0.13.0
 - [feature] Added `FieldValue.arrayUnion()` and `FieldValue.arrayRemove()` to
   atomically add and remove elements from an array field in a document.
 - [feature] Added `whereField(_:arrayContains:)` query filter to find
@@ -418,34 +549,34 @@
 - [fixed] Fixed an issue that could cause deleted documents to momentarily
   re-appear in the results of a listener, causing a flicker (#1591).
 
-# v0.12.6
+# 0.12.6
 - [fixed] Fixed an issue where queries returned fewer results than they should,
   caused by documents that were cached as deleted when they should not have
   been (#1548). Some cache data is cleared and so clients may use extra
   bandwidth the first time they launch with this version of the SDK.
 
-# v0.12.5
+# 0.12.5
 - [changed] Internal improvements.
 
-# v0.12.4
+# 0.12.4
 - [fixed] `setData` methods taking `mergeFields:` arguments can now delete
   fields using `FieldValue.delete()`.
 - [fixed] Firestore will now recover from auth token expiration when the system
   clock is wrong.
 - [fixed] Fixed compilation with older Xcode versions (#1366).
 
-# v0.12.3
+# 0.12.3
 - [changed] Internal improvements.
 
-# v0.12.2
+# 0.12.2
 - [fixed] Fixed an issue where `FirestoreSettings` would accept a concurrent
   dispatch queue, but this configuration would trigger an assertion failure.
   Passing a concurrent dispatch queue should now work correctly (#988).
 
-# v0.12.1
+# 0.12.1
 - [changed] Internal improvements.
 
-# v0.12.0
+# 0.12.0
 - [changed] Replaced the `DocumentListenOptions` object with a simple boolean.
   Instead of calling
   `addSnapshotListener(options: DocumentListenOptions.includeMetadataChanges(true))`
@@ -474,7 +605,7 @@
 - [feature] Added new `mergeFields:(NSArray<id>*)` override for `set()`
   which allows merging of a reduced subset of fields.
 
-# v0.11.0
+# 0.11.0
 - [fixed] Fixed a regression in the Firebase iOS SDK release 4.11.0 that could
   cause `getDocument()` requests made while offline to be delayed by up to 10
   seconds (rather than returning from cache immediately).
@@ -489,7 +620,7 @@
   a floating-point value, so the value read back from a `DocumentSnapshot`
   might be slightly different from the value written).
 
-# v0.10.4
+# 0.10.4
 - [changed] If the SDK's attempt to connect to the Cloud Firestore backend
   neither succeeds nor fails within 10 seconds, the SDK will consider itself
   "offline", causing getDocument() calls to resolve with cached results, rather
@@ -498,14 +629,14 @@
   result in a "Mutation batchIDs must be acknowledged in order" assertion crash.
 - [fixed] Fixed undefined symbols in the absl namespace (#898).
 
-# v0.10.3
+# 0.10.3
 - [fixed] Fixed a regression in the 4.10.0 Firebase iOS SDK release that
   prevented the SDK from communicating with the backend before successfully
   authenticating via Firebase Authentication or after unauthenticating and
   re-authenticating. Reads and writes would silently be executed locally
   but not sent to the backend.
 
-# v0.10.2
+# 0.10.2
 - [changed] When you delete a FirebaseApp, the associated Firestore instances
   are now also deleted (#683).
 - [fixed] Fixed race conditions in streams that could be exposed by rapidly
@@ -513,13 +644,13 @@
   a failure from the server (#835).
 - [fixed] Addressed warnings shown by the latest versions of Xcode and CocoaPods.
 
-# v0.10.1
+# 0.10.1
 - [fixed] Fixed a regression in Firebase iOS release 4.8.1 that could in certain
   cases result in an "OnlineState should not affect limbo documents." assertion
   crash when the client loses its network connection.
 - [fixed] It's now possible to pass a nil completion block to WriteBatch.commit (#745).
 
-# v0.10.0
+# 0.10.0
 - [changed] Removed the includeMetadataChanges property in FIRDocumentListenOptions
   to avoid confusion with the factory method of the same name.
 - [changed] Added a commit method that takes no completion handler to FIRWriteBatch.
@@ -541,26 +672,26 @@
 - [fixed] Fixed a crash in `closeWithFinaleState:` that could be triggered by
   signing out when the app didn't have a network connection.
 
-# v0.9.4
+# 0.9.4
 - [changed] Firestore no longer has a direct dependency on FirebaseAuth.
 - [fixed] Fixed a crash when using path names with international characters
   with persistence enabled.
 - [fixed] Addressed race condition during the teardown of idle streams (#490).
 
-# v0.9.3
+# 0.9.3
 - [changed] Improved performance loading documents matching a query.
 - [changed] Cleanly shut down idle write streams.
 
-# v0.9.2
+# 0.9.2
 - [changed] Firestore now retries requests more often before considering a client offline.
 - [changed] You can now use FieldValue.delete() with SetOptions.merge().
 
-# v0.9.1
+# 0.9.1
 - [fixed] Fixed validation of nested arrays to allow indirect nesting.
 
-# v0.9.0
+# 0.9.0
 - [fixed] Add an NS_SWIFT_NAME for FIRSnapshotMetadata and FIRListenerRegistration.
 - [fixed] Fixed retain cycle in DocumentReference.getDocument(completion:).
 
-# v0.8.0
+# 0.8.0
 - Initial public release.

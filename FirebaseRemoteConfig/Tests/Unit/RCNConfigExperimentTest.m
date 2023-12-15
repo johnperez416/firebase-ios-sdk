@@ -38,9 +38,11 @@
 @interface RCNConfigExperiment ()
 @property(nonatomic, copy) NSMutableArray *experimentPayloads;
 @property(nonatomic, copy) NSMutableDictionary *experimentMetadata;
+@property(nonatomic, copy) NSMutableArray *activeExperimentPayloads;
 @property(nonatomic, strong) RCNConfigDBManager *DBManager;
 - (NSTimeInterval)updateExperimentStartTime;
 - (void)loadExperimentFromTable;
+- (void)updateActiveExperimentsInDB;
 @end
 
 @interface RCNConfigExperimentTest : XCTestCase {
@@ -232,6 +234,8 @@
     XCTAssertNil(error);
     XCTAssertEqualObjects(experiment.experimentMetadata[@"last_experiment_start_time"],
                           @(12345678));
+    OCMVerify([experiment updateActiveExperimentsInDB]);
+    XCTAssertEqualObjects(experiment.activeExperimentPayloads, @[ payloadData ]);
   }];
 }
 
@@ -255,7 +259,7 @@
 
 + (NSData *)payloadDataFromTestFile {
 #if SWIFT_PACKAGE
-  NSBundle *bundle = Firebase_RemoteConfigUnit_SWIFTPM_MODULE_BUNDLE();
+  NSBundle *bundle = SWIFTPM_MODULE_BUNDLE;
 #else
   NSBundle *bundle = [NSBundle bundleForClass:[self class]];
 #endif

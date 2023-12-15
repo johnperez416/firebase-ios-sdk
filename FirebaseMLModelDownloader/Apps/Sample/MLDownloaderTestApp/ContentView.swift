@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import SwiftUI
 import FirebaseMLModelDownloader
+import SwiftUI
 
 struct ContentView: View {
   var downloadTotal: Float = 1.0
@@ -24,7 +24,7 @@ struct ContentView: View {
       Button(action: downloader.downloadModelHelper(downloadType: .localModel), label: {
         Text("Local Model")
       })
-        .buttonStyle(CustomDownloadButtonStyle())
+      .buttonStyle(CustomDownloadButtonStyle())
 
       Button(
         action: downloader.downloadModelHelper(downloadType: .localModelUpdateInBackground),
@@ -37,18 +37,18 @@ struct ContentView: View {
       Button(action: downloader.downloadModelHelper(downloadType: .latestModel), label: {
         Text("Latest Model")
       })
-        .buttonStyle(CustomDownloadButtonStyle())
+      .buttonStyle(CustomDownloadButtonStyle())
 
       Button(action: downloader.listModelHelper(), label: {
         Text("List Models")
       })
-        .buttonStyle(CustomListButtonStyle())
-        .padding()
+      .buttonStyle(CustomListButtonStyle())
+      .padding()
 
       Button(action: downloader.deleteModelHelper(), label: {
         Text("Delete Model")
       })
-        .buttonStyle(CustomDeleteButtonStyle())
+      .buttonStyle(CustomDeleteButtonStyle())
     }
   }
 

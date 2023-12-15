@@ -39,6 +39,8 @@
 #include "Firestore/core/src/credentials/empty_credentials_provider.h"
 #include "Firestore/core/src/credentials/user.h"
 #include "Firestore/core/src/local/local_store.h"
+#include "Firestore/core/src/local/lru_garbage_collector.h"
+#include "Firestore/core/src/local/memory_lru_reference_delegate.h"
 #include "Firestore/core/src/local/persistence.h"
 #include "Firestore/core/src/local/query_engine.h"
 #include "Firestore/core/src/model/database_id.h"
@@ -60,8 +62,8 @@
 #include "Firestore/core/test/unit/testutil/async_testing.h"
 #include "absl/memory/memory.h"
 
-using firebase::firestore::api::LoadBundleTask;
 using firebase::firestore::Error;
+using firebase::firestore::api::LoadBundleTask;
 using firebase::firestore::bundle::BundleReader;
 using firebase::firestore::core::DatabaseInfo;
 using firebase::firestore::core::EventListener;
@@ -75,9 +77,11 @@ using firebase::firestore::credentials::EmptyAppCheckCredentialsProvider;
 using firebase::firestore::credentials::EmptyAuthCredentialsProvider;
 using firebase::firestore::credentials::HashUser;
 using firebase::firestore::credentials::User;
-using firebase::firestore::local::QueryEngine;
 using firebase::firestore::local::LocalStore;
+using firebase::firestore::local::LruDelegate;
+using firebase::firestore::local::LruParams;
 using firebase::firestore::local::Persistence;
+using firebase::firestore::local::QueryEngine;
 using firebase::firestore::local::TargetData;
 using firebase::firestore::model::DatabaseId;
 using firebase::firestore::model::DocumentKey;
@@ -87,9 +91,9 @@ using firebase::firestore::model::MutationResult;
 using firebase::firestore::model::OnlineState;
 using firebase::firestore::model::SnapshotVersion;
 using firebase::firestore::model::TargetId;
+using firebase::firestore::remote::ConnectivityMonitor;
 using firebase::firestore::remote::CreateFirebaseMetadataProviderNoOp;
 using firebase::firestore::remote::CreateNoOpConnectivityMonitor;
-using firebase::firestore::remote::ConnectivityMonitor;
 using firebase::firestore::remote::FirebaseMetadataProvider;
 using firebase::firestore::remote::MockDatastore;
 using firebase::firestore::remote::RemoteStore;
@@ -170,6 +174,8 @@ NS_ASSUME_NONNULL_BEGIN
 
   std::unique_ptr<Persistence> _persistence;
 
+  LruDelegate *_lru_delegate;
+
   std::unique_ptr<LocalStore> _localStore;
 
   std::unique_ptr<SyncEngine> _syncEngine;
@@ -209,6 +215,7 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 - (instancetype)initWithPersistence:(std::unique_ptr<Persistence>)persistence
+                            eagerGC:(BOOL)eagerGC
                         initialUser:(const User &)initialUser
                   outstandingWrites:(const FSTOutstandingWriteQueues &)outstandingWrites
       maxConcurrentLimboResolutions:(size_t)maxConcurrentLimboResolutions {
@@ -228,6 +235,9 @@ NS_ASSUME_NONNULL_BEGIN
     _workerQueue = AsyncQueueForTesting();
     _persistence = std::move(persistence);
     _localStore = absl::make_unique<LocalStore>(_persistence.get(), &_queryEngine, initialUser);
+    if (!eagerGC) {
+      _lru_delegate = static_cast<local::LruDelegate *>(_persistence->reference_delegate());
+    }
     _connectivityMonitor = CreateNoOpConnectivityMonitor();
     _firebaseMetadataProvider = CreateFirebaseMetadataProviderNoOp();
 
@@ -396,6 +406,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)runTimer:(TimerId)timerID {
   _workerQueue->RunScheduledOperationsUntil(timerID);
+}
+
+- (void)triggerLruGC:(NSNumber *)threshold {
+  if (_lru_delegate != nullptr) {
+    _workerQueue->EnqueueBlocking([&] {
+      auto *gc = _lru_delegate->garbage_collector();
+      // Change params to collect all possible garbages
+      gc->set_lru_params(LruParams{/*min_bytes_threshold*/ threshold.longValue,
+                                   /*percentile_to_collect*/ 100,
+                                   /*maximum_sequence_numbers_to_collect*/ 1000});
+      _localStore->CollectGarbage(gc);
+    });
+  }
 }
 
 - (void)changeUser:(const User &)user {

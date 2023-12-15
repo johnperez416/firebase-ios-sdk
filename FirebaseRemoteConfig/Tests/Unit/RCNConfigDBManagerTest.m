@@ -19,7 +19,7 @@
 
 #import <sqlite3.h>
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 #import "FirebaseRemoteConfig/Sources/Private/RCNConfigSettings.h"
 #import "FirebaseRemoteConfig/Sources/RCNConfigConstants.h"
 #import "FirebaseRemoteConfig/Sources/RCNConfigContent.h"
@@ -498,6 +498,45 @@
                                      value:payloadData2
                          completionHandler:nil];
   [_DBManager insertExperimentTableWithKey:@RCNExperimentTableKeyPayload
+                                     value:payloadData3
+                         completionHandler:writePayloadCompletion];
+
+  [self waitForExpectationsWithTimeout:_expectionTimeout handler:nil];
+}
+
+- (void)testWriteAndLoadActivatedExperiments {
+  XCTestExpectation *updateAndLoadExperimentExpectation =
+      [self expectationWithDescription:@"Update and load experiment in database successfully"];
+
+  NSError *error;
+  NSArray *payload2 = @[ @"ab", @"cd" ];
+  NSData *payloadData2 = [NSJSONSerialization dataWithJSONObject:payload2
+                                                         options:NSJSONWritingPrettyPrinted
+                                                           error:&error];
+  NSDictionary *payload3 =
+      @{@"experiment_ID" : @"35667", @"experiment_activate_name" : @"activate_game"};
+  NSData *payloadData3 = [NSJSONSerialization dataWithJSONObject:payload3
+                                                         options:NSJSONWritingPrettyPrinted
+                                                           error:&error];
+  NSArray *payloads = @[ [[NSData alloc] init], payloadData2, payloadData3 ];
+
+  RCNDBCompletion writePayloadCompletion = ^(BOOL success, NSDictionary *result) {
+    XCTAssertTrue(success);
+    RCNDBCompletion readCompletion = ^(BOOL success, NSDictionary *experimentResults) {
+      XCTAssertTrue(success);
+      XCTAssertNotNil(experimentResults[@RCNExperimentTableKeyActivePayload]);
+      XCTAssertEqualObjects(payloads, experimentResults[@RCNExperimentTableKeyActivePayload]);
+      [updateAndLoadExperimentExpectation fulfill];
+    };
+    [self->_DBManager loadExperimentWithCompletionHandler:readCompletion];
+  };
+  [_DBManager insertExperimentTableWithKey:@RCNExperimentTableKeyActivePayload
+                                     value:[[NSData alloc] init]
+                         completionHandler:nil];
+  [_DBManager insertExperimentTableWithKey:@RCNExperimentTableKeyActivePayload
+                                     value:payloadData2
+                         completionHandler:nil];
+  [_DBManager insertExperimentTableWithKey:@RCNExperimentTableKeyActivePayload
                                      value:payloadData3
                          completionHandler:writePayloadCompletion];
 

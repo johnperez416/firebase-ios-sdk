@@ -15,6 +15,11 @@
 include(CheckSymbolExists)
 include(CheckIncludeFiles)
 
+include(python_setup)
+FirebaseSetupPythonInterpreter(
+  OUTVAR MY_PYTHON_EXECUTABLE
+  KEY FirestoreCore
+)
 
 ## firestore_util
 
@@ -138,6 +143,9 @@ target_link_libraries(
   absl::optional
   absl::strings
   absl::time
+  protobuf-nanopb-static
+  firestore_protos_nanopb
+  grpc++
 )
 
 if(HAVE_OPENSSL_RAND_H)
@@ -197,10 +205,14 @@ firebase_ios_glob(
   src/credentials/*.h
   src/immutable/*.cc
   src/immutable/*.h
+  src/index/*.cc
+  src/index/*.h
   src/local/*.cc
   src/local/*.h
   src/model/*.cc
   src/model/*.h
+  src/model/mutation/*.cc
+  src/model/mutation/*.h
   src/nanopb/*.cc
   src/nanopb/*.h
   src/objc/*.h
@@ -255,6 +267,7 @@ if(APPLE)
     firestore_core PUBLIC
     "-framework Foundation"
     "-framework SystemConfiguration"
+    FirebaseAppCheckInterop
     FirebaseAuthInterop
     FirebaseCore
   )
@@ -281,7 +294,7 @@ add_custom_command(
   OUTPUT
   ${GRPC_ROOT_CERTIFICATE_SOURCES}
   COMMAND
-  python ${FIREBASE_SOURCE_DIR}/scripts/binary_to_array.py
+  ${MY_PYTHON_EXECUTABLE} ${FIREBASE_SOURCE_DIR}/scripts/binary_to_array.py
   --output_header=${OUTPUT_DIR}/grpc_root_certificates_generated.h
   --output_source=${OUTPUT_DIR}/grpc_root_certificates_generated.cc
   --cpp_namespace=firebase::firestore::remote

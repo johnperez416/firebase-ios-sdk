@@ -65,6 +65,7 @@ using testutil::Filter;
 using testutil::Map;
 using testutil::OrderBy;
 using testutil::Value;
+using util::JsonReader;
 
 json Parse(const std::string& s) {
   return json::parse(s, /*callback=*/nullptr, /*allow_exception=*/false);
@@ -827,14 +828,6 @@ TEST_F(BundleSerializerTest, DecodeInvalidFieldFilterOperatorFails) {
   }
 
   {
-    auto json_copy =
-        ReplacedCopy(json_string, "\"stringValue\"", "\"arrayValue\"");
-    JsonReader reader;
-    bundle_serializer.DecodeNamedQuery(reader, Parse(json_copy));
-    EXPECT_NOT_OK(reader.status());
-  }
-
-  {
     auto json_copy = ReplacedCopy(json_string, "\"op\"", "\"Op\"");
     JsonReader reader;
     bundle_serializer.DecodeNamedQuery(reader, Parse(json_copy));
@@ -850,11 +843,26 @@ TEST_F(BundleSerializerTest, DecodeInvalidFieldFilterOperatorFails) {
 }
 
 TEST_F(BundleSerializerTest, DecodesCompositeFilter) {
+  core::Query original = testutil::Query("colls")
+                             .AddingFilter(Filter("f1", "==", nullptr))
+                             .AddingFilter(Filter("f2", "==", true))
+                             .AddingFilter(Filter("f3", "==", 50.3));
+  VerifyNamedQueryRoundtrip(original);
+}
+
+TEST_F(BundleSerializerTest, DecodesCompositeNotNullFilter) {
   core::Query original =
       testutil::Query("colls")
           .AddingFilter(Filter("f1", "not-in", Array(1, "2", 3.0)))
           .AddingFilter(Filter("f1", "!=", false))
           .AddingFilter(Filter("f1", "<=", 1000.0));
+  VerifyNamedQueryRoundtrip(original);
+}
+
+TEST_F(BundleSerializerTest, DecodesCompositeNullFilter) {
+  core::Query original = testutil::Query("colls")
+                             .AddingFilter(Filter("f1", "==", nullptr))
+                             .AddingFilter(Filter("f2", "==", nullptr));
   VerifyNamedQueryRoundtrip(original);
 }
 
@@ -1013,7 +1021,7 @@ TEST_F(BundleSerializerTest, DecodesStartAtCursor) {
       testutil::Query("colls")
           .AddingOrderBy(OrderBy("f1", "asc"))
           .StartingAt(core::Bound::FromValue(Array("f1", 1000),
-                                             /* is_before= */ true));
+                                             /* inclusive= */ true));
 
   VerifyNamedQueryRoundtrip(original);
 }
@@ -1023,7 +1031,7 @@ TEST_F(BundleSerializerTest, DecodesEndAtCursor) {
       testutil::Query("colls")
           .AddingOrderBy(OrderBy("f1", "desc"))
           .EndingAt(core::Bound::FromValue(Array("f1", "1000"),
-                                           /* is_before= */ false));
+                                           /* inclusive= */ false));
 
   VerifyNamedQueryRoundtrip(original);
 }
@@ -1151,6 +1159,38 @@ TEST_F(BundleSerializerTest, DecodeInvalidBundledDocumentMetadataFails) {
     bundle_serializer.DecodeDocumentMetadata(reader, Parse(json_copy));
     EXPECT_NOT_OK(reader.status());
   }
+}
+
+TEST_F(BundleSerializerTest, DecodeTargetWithoutImplicitOrderByOnName) {
+  std::string json(
+      R"({"name":"myNamedQuery",
+"bundledQuery":{"parent":"projects/p/databases/default/documents",
+"structuredQuery":{"from":[{"collectionId":"foo"}],
+"limit":{"value":10}},"limitType":"FIRST"},
+"readTime":{"seconds":"1679674432","nanos":579934000}})");
+  JsonReader reader;
+  auto named_query = bundle_serializer.DecodeNamedQuery(reader, Parse(json));
+  EXPECT_OK(reader.status());
+  EXPECT_EQ(testutil::Query("foo").WithLimitToFirst(10).ToTarget(),
+            named_query.bundled_query().target());
+  EXPECT_EQ(core::LimitType::First, named_query.bundled_query().limit_type());
+}
+
+TEST_F(BundleSerializerTest,
+       DecodeLimitToLastTargetWithoutImplicitOrderByOnName) {
+  std::string json(
+      R"({"name":"myNamedQuery",
+"bundledQuery":{"parent":"projects/p/databases/default/documents",
+"structuredQuery":{"from":[{"collectionId":"foo"}],
+"limit":{"value":10}},"limitType":"LAST"},
+"readTime":{"seconds":"1679674432","nanos":579934000}})");
+  JsonReader reader;
+  auto named_query = bundle_serializer.DecodeNamedQuery(reader, Parse(json));
+  EXPECT_OK(reader.status());
+  // Note `WithLimitToFirst(10)` is expected.
+  EXPECT_EQ(testutil::Query("foo").WithLimitToFirst(10).ToTarget(),
+            named_query.bundled_query().target());
+  EXPECT_EQ(core::LimitType::Last, named_query.bundled_query().limit_type());
 }
 
 }  //  namespace

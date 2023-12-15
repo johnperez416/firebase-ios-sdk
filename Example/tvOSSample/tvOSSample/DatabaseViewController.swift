@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import UIKit
 import FirebaseDatabase
+import UIKit
 
 /// A class to demonstrate the Firebase Realtime Database API. This will show a number read
 /// from the Database and increase or decrease it based on the buttons pressed.
@@ -47,7 +47,7 @@ class DatabaseViewController: UIViewController {
   private func changeServerValue(with type: Counter) {
     let ref = Database.database().reference(withPath: Constants.databasePath)
     // Update the current value of the number.
-    ref.runTransactionBlock { (currentData) -> TransactionResult in
+    ref.runTransactionBlock { currentData -> TransactionResult in
       guard let value = currentData.value as? Int else {
         return TransactionResult.abort()
       }
@@ -77,7 +77,7 @@ class DatabaseViewController: UIViewController {
 
   // MARK: - Constants
 
-  private struct Constants {
+  private enum Constants {
     static let databasePath = "magicSyncingCounter"
   }
 }

@@ -18,6 +18,7 @@
 
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <utility>
 
 #include "Firestore/core/src/core/field_filter.h"
@@ -78,7 +79,7 @@ TargetData TargetCacheTestBase::MakeTargetData(
   ByteString resume_token = ResumeToken(version);
   return TargetData(query.ToTarget(), target_id, sequence_number,
                     QueryPurpose::Listen, Version(version), Version(version),
-                    resume_token);
+                    resume_token, /*expected_count=*/absl::nullopt);
 }
 
 void TargetCacheTestBase::AddMatchingKey(const DocumentKey& key,

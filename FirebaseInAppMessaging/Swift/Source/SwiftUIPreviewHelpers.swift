@@ -14,13 +14,14 @@
 
 import UIKit
 
-import FirebaseInAppMessaging
+#if SWIFT_PACKAGE
+  @_exported import FirebaseInAppMessagingInternal
+#endif // SWIFT_PACKAGE
 
 @available(iOS 13.0, tvOS 13.0, *)
 @available(iOSApplicationExtension, unavailable)
 @available(tvOSApplicationExtension, unavailable)
-public struct InAppMessagingPreviewHelpers {
-  public static let foo = UIColor.black
+public enum InAppMessagingPreviewHelpers {
   public static func cardMessage(campaignName: String = "Card message campaign",
                                  title: String = "Title for modal message",
                                  body: String? = "Body for modal message",
@@ -55,8 +56,8 @@ public struct InAppMessagingPreviewHelpers {
 
     var secondaryActionButton: InAppMessagingActionButton?
     if secondaryButtonText != nil,
-      secondaryButtonTextColor != nil,
-      secondaryButtonBackgroundColor != nil {
+       secondaryButtonTextColor != nil,
+       secondaryButtonBackgroundColor != nil {
       secondaryActionButton = InAppMessagingActionButton(buttonText: secondaryButtonText!,
                                                          buttonTextColor: secondaryButtonTextColor!,
                                                          backgroundColor: secondaryButtonBackgroundColor!)
@@ -96,8 +97,8 @@ public struct InAppMessagingPreviewHelpers {
 
     var actionButton: InAppMessagingActionButton?
     if let buttonText = buttonText,
-      let buttonTextColor = buttonTextColor,
-      let buttonBackgroundColor = buttonBackgroundColor {
+       let buttonTextColor = buttonTextColor,
+       let buttonBackgroundColor = buttonBackgroundColor {
       actionButton = InAppMessagingActionButton(buttonText: buttonText,
                                                 buttonTextColor: buttonTextColor,
                                                 backgroundColor: buttonBackgroundColor)

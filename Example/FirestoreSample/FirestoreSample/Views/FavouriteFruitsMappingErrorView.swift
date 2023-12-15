@@ -12,18 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import SwiftUI
 import FirebaseFirestoreSwift
+import SwiftUI
 
 private struct Fruit: Codable, Identifiable, Equatable {
   @DocumentID var id: String?
   var name: String
 }
 
+/// This view demonstrates how to use the `FirestoreQuery` property wrapper's
+/// error handling. When any of the documents can't be mapped, this view will
+/// just show an error message.
 struct FavouriteFruitsMappingErrorView: View {
   @FirestoreQuery(
     collectionPath: "mappingFailure",
-    decodingFailureStrategy: .raise
+    decodingFailureStrategy: .raise,
+    animation: .default
   ) private var fruitResults: Result<[Fruit], Error>
 
   var body: some View {
@@ -32,7 +36,6 @@ struct FavouriteFruitsMappingErrorView: View {
       List(fruits) { fruit in
         Text(fruit.name)
       }
-      .animation(.default, value: fruits)
       .navigationTitle("Mapping failure")
 
     case let .failure(error):

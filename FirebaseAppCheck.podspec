@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'FirebaseAppCheck'
-  s.version          = '8.10.0-beta'
+  s.version          = '10.20.0'
   s.summary          = 'Firebase App Check SDK.'
 
   s.description      = <<-DESC
@@ -8,7 +8,7 @@ Pod::Spec.new do |s|
                        DESC
 
   s.homepage         = 'https://firebase.google.com'
-  s.license          = { :type => 'Apache', :file => 'LICENSE' }
+  s.license          = { :type => 'Apache-2.0', :file => 'LICENSE' }
   s.authors          = 'Google, Inc.'
 
   s.source           = {
@@ -17,10 +17,12 @@ Pod::Spec.new do |s|
   }
   s.social_media_url = 'https://twitter.com/Firebase'
 
-  ios_deployment_target = '9.0'
-  osx_deployment_target = '10.12'
-  tvos_deployment_target = '10.0'
+  ios_deployment_target = '11.0'
+  osx_deployment_target = '10.13'
+  tvos_deployment_target = '12.0'
   watchos_deployment_target = '6.0'
+
+  s.swift_version = '5.3'
 
   s.ios.deployment_target = ios_deployment_target
   s.osx.deployment_target = osx_deployment_target
@@ -34,7 +36,7 @@ Pod::Spec.new do |s|
 
   s.source_files = [
     base_dir + 'Sources/**/*.[mh]',
-    'FirebaseCore/Sources/Private/*.h',
+    'FirebaseCore/Extension/*.h',
   ]
   s.public_header_files = base_dir + 'Sources/Public/FirebaseAppCheck/*.h'
 
@@ -42,9 +44,11 @@ Pod::Spec.new do |s|
   s.osx.weak_framework = 'DeviceCheck'
   s.tvos.weak_framework = 'DeviceCheck'
 
-  s.dependency 'FirebaseCore', '~> 8.0'
-  s.dependency 'PromisesObjC', '>= 1.2', '< 3.0'
-  s.dependency 'GoogleUtilities/Environment', '~> 7.6'
+  s.dependency 'AppCheckCore', '~> 10.18'
+  s.dependency 'FirebaseAppCheckInterop', '~> 10.17'
+  s.dependency 'FirebaseCore', '~> 10.0'
+  s.dependency 'PromisesObjC', '~> 2.1'
+  s.dependency 'GoogleUtilities/Environment', '~> 7.8'
 
   s.pod_target_xcconfig = {
     'GCC_C_LANGUAGE_STANDARD' => 'c99',
@@ -59,14 +63,13 @@ Pod::Spec.new do |s|
     }
     unit_tests.source_files = [
       base_dir + 'Tests/Unit/**/*.[mh]',
-      base_dir + 'Tests/Utils/**/*.[mh]',
       'SharedTestUtilities/AppCheckFake/*',
       'SharedTestUtilities/AppCheckBackoffWrapperFake/*',
       'SharedTestUtilities/Date/*',
       'SharedTestUtilities/URLSession/*',
     ]
 
-    unit_tests.resources = base_dir + 'Tests/Fixture/**/*'
+    unit_tests.resources = base_dir + 'Tests/Unit/Fixture/**/*'
     unit_tests.dependency 'OCMock'
     unit_tests.requires_app_host = true
   end
@@ -78,10 +81,8 @@ Pod::Spec.new do |s|
       :tvos => tvos_deployment_target
     }
     integration_tests.source_files = [
-      base_dir + 'Tests/Integration/**/*.[mh]',
-      base_dir + 'Tests/Integration/**/*.[mh]',
+      base_dir + 'Tests/Integration/**/*.swift',
     ]
-    integration_tests.resources = base_dir + 'Tests/Fixture/**/*'
     integration_tests.requires_app_host = true
   end
 
@@ -93,7 +94,6 @@ Pod::Spec.new do |s|
     }
     swift_unit_tests.source_files = [
       base_dir + 'Tests/Unit/Swift/**/*.swift',
-      base_dir + 'Tests/Unit/Swift/**/*.h',
     ]
   end
 

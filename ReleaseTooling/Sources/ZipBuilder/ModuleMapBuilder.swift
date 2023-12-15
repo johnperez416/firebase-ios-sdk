@@ -46,6 +46,15 @@ struct ModuleMapBuilder {
       module * { export * }
 
       """
+
+      if module == "FirebaseFirestoreInternal" {
+        content += """
+          link framework "BoringSSL-GRPC"
+          link framework "gRPC-Core"
+          link framework "gRPC-C++"
+        """
+      }
+
       for framework in frameworks.sorted() {
         content += "  link framework " + framework + "\n"
       }
@@ -111,30 +120,39 @@ struct ModuleMapBuilder {
   /// Build the module map files for the source frameworks.
   ///
   func build() {
-    for (_, info) in installedPods {
-      if info.isSourcePod == false ||
-        info.transitiveFrameworks != nil ||
-        info.versionedPod.name == "Firebase" {
-        continue
-      }
-      generate(framework: info)
+    for framework in installedPods.values
+      where framework.isSourcePod &&
+      framework.versionedPod.name != "Firebase" &&
+      framework.transitiveFrameworks == nil {
+      generate(framework: framework)
     }
   }
 
   // MARK: - Internal Functions
 
-  /// Build a module map for a single framework. A CocoaPod install is run to extract the required frameworks
-  /// and libraries from the generated xcconfig. All previously installed dependent pods are put into the Podfile
+  /// Build a module map for a single framework. A CocoaPod install is run to extract the required
+  /// frameworks
+  /// and libraries from the generated xcconfig. All previously installed dependent pods are put
+  /// into the Podfile
   /// to make sure we install the right version and from the right location.
   private func generate(framework: FrameworkInfo) {
     let podName = framework.versionedPod.name
-    let deps = CocoaPodUtils.transitiveVersionedPodDependencies(for: podName, in: allPods)
-    _ = CocoaPodUtils.installPods(allSubspecList(framework: framework) + deps,
-                                  inDir: projectDir,
-                                  platform: platform,
-                                  customSpecRepos: customSpecRepos,
-                                  localPodspecPath: localPodspecPath,
-                                  linkage: .forcedStatic)
+    let deps = CocoaPodUtils.transitiveVersionedPodDependencies(for: podName, in: allPods).filter {
+      // Don't include Interop pods in the module map calculation since they shouldn't add anything
+      // and it uses the platform-independent version of the dependency list, which causes a crash
+      // for the iOS-only RecaptchaInterop pod when the subsequent code tries to `pod install` it
+      // for macOS. All this module code should go away when we switch to building dynamic
+      // frameworks.
+      !$0.name.hasSuffix("Interop")
+    }
+
+    CocoaPodUtils.installPods(allSubspecList(framework: framework) + deps,
+                              inDir: projectDir,
+                              platform: platform,
+                              customSpecRepos: customSpecRepos,
+                              localPodspecPath: localPodspecPath,
+                              linkage: .forcedStatic)
+
     let xcconfigFile = projectDir.appendingPathComponents(["Pods", "Target Support Files",
                                                            "Pods-FrameworkMaker",
                                                            "Pods-FrameworkMaker.release.xcconfig"])
@@ -142,19 +160,19 @@ struct ModuleMapBuilder {
       .moduleMapContents = makeModuleMap(forFramework: framework, withXcconfigFile: xcconfigFile)
   }
 
-  /// Convert a list of versioned pods to a list of versioned pods specified with all needed subspecs.
+  /// Convert a list of versioned pods to a list of versioned pods specified with all needed
+  /// subspecs.
   private func allSubspecList(framework: FrameworkInfo) -> [CocoaPodUtils.VersionedPod] {
     let name = framework.versionedPod.name
     let version = framework.versionedPod.version
-    let subspecs = framework.subspecs
-    if subspecs.count == 0 {
-      return [CocoaPodUtils.VersionedPod(name: "\(name)", version: version)]
+
+    guard framework.subspecs.count > 0 else {
+      return [CocoaPodUtils.VersionedPod(name: name, version: version)]
     }
-    var list: [CocoaPodUtils.VersionedPod] = []
-    for subspec in framework.subspecs {
-      list.append(CocoaPodUtils.VersionedPod(name: "\(name)/\(subspec)", version: version))
+
+    return framework.subspecs.map { subspec in
+      CocoaPodUtils.VersionedPod(name: "\(name)/\(subspec)", version: version)
     }
-    return list
   }
 
   // Extract the framework and library dependencies for a framework from

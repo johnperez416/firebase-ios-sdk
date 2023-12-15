@@ -15,14 +15,8 @@
 #import "SharedTestUtilities/FIRComponentTestUtilities.h"
 #import "SharedTestUtilities/FIROptionsMock.h"
 
-// Firebase Storage
-#import "FirebaseStorage/Sources/FIRStorageComponent.h"
-
 // Firebase Core
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
-
-// Firebase Functions
-#import "FirebaseFunctions/Sources/FIRFunctions+Internal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 
 // Firebase Auth
 #import <FirebaseAuth/FIRAuth.h>
@@ -48,8 +42,12 @@
 #import "FirebaseAuth/Sources/Backend/RPC/FIRGetOOBConfirmationCodeResponse.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRGetProjectConfigRequest.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRGetProjectConfigResponse.h"
+#import "FirebaseAuth/Sources/Backend/RPC/FIRGetRecaptchaConfigRequest.h"
+#import "FirebaseAuth/Sources/Backend/RPC/FIRGetRecaptchaConfigResponse.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRResetPasswordRequest.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRResetPasswordResponse.h"
+#import "FirebaseAuth/Sources/Backend/RPC/FIRRevokeTokenRequest.h"
+#import "FirebaseAuth/Sources/Backend/RPC/FIRRevokeTokenResponse.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRSecureTokenRequest.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRSecureTokenResponse.h"
 #import "FirebaseAuth/Sources/Backend/RPC/FIRSendVerificationCodeRequest.h"

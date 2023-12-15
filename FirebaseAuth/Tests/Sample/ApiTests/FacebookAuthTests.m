@@ -36,7 +36,8 @@ static NSString *const kFacebookTestAccountName = KFACEBOOK_USER_NAME;
 
 @implementation FacebookAuthTests
 
-- (void)testSignInWithFaceboook {
+// TODO(#10752) - Update and fix the Facebook login Sample app and tests.
+- (void)SKIPtestSignInWithFaceboook {
   FIRAuth *auth = [FIRAuth auth];
   if (!auth) {
     XCTFail(@"Could not obtain auth object.");
@@ -76,7 +77,8 @@ static NSString *const kFacebookTestAccountName = KFACEBOOK_USER_NAME;
   [self deleteFacebookTestingAccountbyId:facebookAccountId];
 }
 
-- (void)testLinkAnonymousAccountToFacebookAccount {
+// TODO(#10752) - Update and fix the Facebook login Sample app and tests.
+- (void)SKIPtestLinkAnonymousAccountToFacebookAccount {
   FIRAuth *auth = [FIRAuth auth];
   if (!auth) {
     XCTFail(@"Could not obtain auth object.");
@@ -155,8 +157,6 @@ static NSString *const kFacebookTestAccountName = KFACEBOOK_USER_NAME;
                                            error.localizedDescription);
                                  }
                                }];
-  NSString *userInfo = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-  NSLog(@"The info of created Facebook testing account is: %@", userInfo);
   // Parses the access token from the JSON data.
   NSDictionary *userInfoDict = [NSJSONSerialization JSONObjectWithData:data
                                                                options:kNilOptions

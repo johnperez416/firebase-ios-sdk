@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import UIKit
 import FirebaseStorage
+import UIKit
 
 class StorageViewController: UIViewController {
   /// An enum describing the different states of the view controller.
@@ -138,7 +138,7 @@ class StorageViewController: UIViewController {
   // MARK: - Constants
 
   /// Internal constants for this class.
-  private struct Constants {
+  private enum Constants {
     /// The image name to download. Can comment this out and replace it with the other below it as
     /// part of the demo. Ensure that Storage has an image uploaded to this path for this to
     /// function properly.

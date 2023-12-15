@@ -20,17 +20,20 @@
 #include <vector>
 
 #include "Firestore/core/src/core/query.h"
+#include "Firestore/core/src/credentials/user.h"
 #include "Firestore/core/src/local/memory_remote_document_cache.h"
 #include "Firestore/core/src/local/persistence.h"
 #include "Firestore/core/src/local/remote_document_cache.h"
 #include "Firestore/core/src/model/document_key.h"
 #include "Firestore/core/src/model/document_key_set.h"
 #include "Firestore/core/src/model/object_value.h"
+#include "Firestore/core/src/model/overlay.h"
 #include "Firestore/core/src/model/value_util.h"
 #include "Firestore/core/src/nanopb/message.h"
 #include "Firestore/core/src/util/string_apple.h"
 #include "Firestore/core/test/unit/testutil/testutil.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/optional.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -102,7 +105,10 @@ MATCHER_P(HasAtLeastDocs,
 
 RemoteDocumentCacheTest::RemoteDocumentCacheTest()
     : persistence_{GetParam()()},
-      cache_{persistence_->remote_document_cache()} {
+      cache_{persistence_->remote_document_cache()},
+      index_manager_{
+          persistence_->GetIndexManager(credentials::User::Unauthenticated())} {
+  cache_->SetIndexManager(index_manager_);
 }
 
 TEST_P(RemoteDocumentCacheTest, ReadDocumentNotInCache) {
@@ -201,7 +207,7 @@ TEST_P(RemoteDocumentCacheTest, DocumentsMatchingQuery) {
 
     core::Query query = Query("b");
     MutableDocumentMap results =
-        cache_->GetMatching(query, SnapshotVersion::None());
+        cache_->GetDocumentsMatchingQuery(query, model::IndexOffset::None());
     std::vector<MutableDocument> docs = {
         Doc("b/1", kVersion, Map("a", 1, "b", 2)),
         Doc("b/2", kVersion, Map("a", 1, "b", 2)),
@@ -217,7 +223,8 @@ TEST_P(RemoteDocumentCacheTest, DocumentsMatchingQuerySinceReadTime) {
     SetTestDocument("b/new", /* updateTime= */ 3, /* readTime= = */ 13);
 
     core::Query query = Query("b");
-    MutableDocumentMap results = cache_->GetMatching(query, Version(12));
+    MutableDocumentMap results = cache_->GetDocumentsMatchingQuery(
+        query, model::IndexOffset::CreateSuccessor(Version(12)));
     std::vector<MutableDocument> docs = {
         Doc("b/new", 3, Map("a", 1, "b", 2)),
     };
@@ -232,12 +239,52 @@ TEST_P(RemoteDocumentCacheTest, DocumentsMatchingUsesReadTimeNotUpdateTime) {
         SetTestDocument("b/new", /* updateTime= */ 2, /* readTime= */ 1);
 
         core::Query query = Query("b");
-        MutableDocumentMap results = cache_->GetMatching(query, Version(1));
+        MutableDocumentMap results = cache_->GetDocumentsMatchingQuery(
+            query, model::IndexOffset::CreateSuccessor(Version(1)));
         std::vector<MutableDocument> docs = {
             Doc("b/old", 1, Map("a", 1, "b", 2)),
         };
         EXPECT_THAT(results, HasExactlyDocs(docs));
       });
+}
+
+TEST_P(RemoteDocumentCacheTest, DocumentsMatchingAppliesQueryCheck) {
+  persistence_->Run("test_documents_matching_query_applies_query_check", [&] {
+    SetTestDocument("a/1", Map("matches", true), /* update_time= */ 1,
+                    /* read_time= */ 1);
+    SetTestDocument("a/2", Map("matches", true), /* update_time= */ 1,
+                    /* read_time= */ 2);
+    SetTestDocument("a/3", Map("matches", false), /* update_time= */ 1,
+                    /* read_time= */ 3);
+
+    core::Query query =
+        Query("a").AddingFilter(testutil::Filter("matches", "==", true));
+    MutableDocumentMap results = cache_->GetDocumentsMatchingQuery(
+        query, model::IndexOffset::CreateSuccessor(Version(1)));
+    std::vector<MutableDocument> docs = {
+        Doc("a/2", 1, Map("matches", true)),
+    };
+    EXPECT_THAT(results, HasExactlyDocs(docs));
+  });
+}
+
+TEST_P(RemoteDocumentCacheTest, DocumentsMatchingRespectsMutatedDocs) {
+  persistence_->Run("test_documents_matching_query_respects_mutated_docs", [&] {
+    SetTestDocument("a/1", Map("matches", true), /* update_time= */ 1,
+                    /* read_time= */ 1);
+    SetTestDocument("a/2", Map("matches", false), /* update_time= */ 1,
+                    /* read_time= */ 2);
+
+    core::Query query =
+        Query("a").AddingFilter(testutil::Filter("matches", "==", true));
+    MutableDocumentMap results = cache_->GetDocumentsMatchingQuery(
+        query, model::IndexOffset::CreateSuccessor(Version(1)), absl::nullopt,
+        {{Key("a/2"), model::Overlay{}}});
+    std::vector<MutableDocument> docs = {
+        Doc("a/2", 1, Map("matches", false)),
+    };
+    EXPECT_THAT(results, HasExactlyDocs(docs));
+  });
 }
 
 TEST_P(RemoteDocumentCacheTest, DoesNotApplyDocumentModificationsToCache) {
@@ -259,7 +306,8 @@ TEST_P(RemoteDocumentCacheTest, DoesNotApplyDocumentModificationsToCache) {
     EXPECT_EQ(document.value(), *Map("value", "old"));
     document.data().Set(Field("value"), Value("new"));
 
-    documents = cache_->GetMatching(Query("coll"), SnapshotVersion::None());
+    documents = cache_->GetDocumentsMatchingQuery(Query("coll"),
+                                                  model::IndexOffset::None());
     document = documents.find(Key("coll/doc"))->second;
     EXPECT_EQ(document.value(), *Map("value", "old"));
     document.data().Set(Field("value"), Value("new"));

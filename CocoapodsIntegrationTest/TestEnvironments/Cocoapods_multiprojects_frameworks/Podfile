@@ -3,17 +3,20 @@ source 'https://github.com/firebase/SpecsStaging.git'
 source 'https://cdn.cocoapods.org/'
 
 # Uncomment the next line to define a global platform for your project
-platform :ios, '10.0'
+platform :ios, '11.0'
 
 target 'CocoapodsIntegrationTest' do
   # Comment the next line if you don't want to use dynamic frameworks
   use_frameworks!
   pod 'FirebaseABTesting', :path => '../'
   pod 'FirebaseAppDistribution', :path => '../'
+  pod 'FirebaseAppCheckInterop', :path => '../'
   pod 'FirebaseCore', :path => '../'
-  pod 'FirebaseCoreDiagnostics', :path => '../'
+  pod 'FirebaseCoreExtension', :path => '../'
+  pod 'FirebaseCoreInternal', :path => '../'
   pod 'FirebaseCrashlytics', :path => '../'
   pod 'FirebaseAuth', :path => '../'
+  pod 'FirebaseAuthInterop', :path => '../'
   pod 'FirebaseDatabase', :path => '../'
   pod 'FirebaseDynamicLinks', :path => '../'
   pod 'FirebaseFirestore', :path => '../'
@@ -21,6 +24,7 @@ target 'CocoapodsIntegrationTest' do
   pod 'FirebaseInAppMessaging', :path => '../'
   pod 'FirebaseInstallations', :path => '../'
   pod 'FirebaseMessaging', :path => '../'
+  pod 'FirebaseMessagingInterop', :path => '../'
   pod 'FirebasePerformance', :path => '../'
   pod 'FirebaseStorage', :path => '../'
 end

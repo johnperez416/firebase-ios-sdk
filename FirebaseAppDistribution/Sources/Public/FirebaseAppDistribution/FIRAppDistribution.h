@@ -13,6 +13,7 @@
 // limitations under the License.
 
 @class FIRAppDistributionRelease;
+@class UIApplication;
 #import <Foundation/Foundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
@@ -46,14 +47,22 @@ NS_SWIFT_NAME(AppDistribution)
 /**
  * Check to see whether a new distribution is available
  */
-- (void)checkForUpdateWithCompletion:
-    (void (^)(FIRAppDistributionRelease *_Nullable release, NSError *_Nullable error))completion
+- (void)checkForUpdateWithCompletion:(void (^)(FIRAppDistributionRelease *_Nullable_result release,
+                                               NSError *_Nullable error))completion
     NS_SWIFT_NAME(checkForUpdate(completion:));
 
 /**
  * Sign out App Distribution tester
  */
 - (void)signOutTester;
+
+/**
+ * Handle an App Distribution URL, for example a link to download a new pre-release version.
+ * Call this method in your app delegate's `openURL` implementation if swizzling is disabled.
+ */
+- (BOOL)application:(UIApplication *)application
+            openURL:(NSURL *)url
+            options:(NSDictionary<NSString *, id> *)options;
 
 /**
  * Accesses the singleton App Distribution instance.
@@ -72,25 +81,25 @@ FOUNDATION_EXPORT NSString *const FIRAppDistributionErrorDomain
 
 /// The key for finding error details in the `NSError`'s `userInfo`.
 FOUNDATION_EXPORT NSString *const FIRAppDistributionErrorDetailsKey
-    NS_SWIFT_NAME(FunctionsErrorDetailsKey);
+    NS_SWIFT_NAME(AppDistributionErrorDetailsKey);
 // clang-format on
 
 /**
  * Error codes representing sign in or version check failure reasons.
  */
-typedef NS_ENUM(NSUInteger, FIRAppDistributionError) {
-  /// Returned when an unknown error occurred.
-  FIRAppDistributionErrorUnknown = 0,
+typedef NS_ERROR_ENUM(FIRAppDistributionErrorDomain, FIRAppDistributionError){
+    /// Returned when an unknown error occurred.
+    FIRAppDistributionErrorUnknown = 0,
 
-  /// Returned when App Distribution failed to authenticate the user.
-  FIRAppDistributionErrorAuthenticationFailure = 1,
+    /// Returned when App Distribution failed to authenticate the user.
+    FIRAppDistributionErrorAuthenticationFailure = 1,
 
-  /// Returned when sign-in was cancelled.
-  FIRAppDistributionErrorAuthenticationCancelled = 2,
+    /// Returned when sign-in was cancelled.
+    FIRAppDistributionErrorAuthenticationCancelled = 2,
 
-  /// Returned when the network was unavailable to make requests or
-  /// the request timed out.
-  FIRAppDistributionErrorNetworkFailure = 3,
+    /// Returned when the network was unavailable to make requests or
+    /// the request timed out.
+    FIRAppDistributionErrorNetworkFailure = 3,
 
 } NS_SWIFT_NAME(AppDistributionError);
 

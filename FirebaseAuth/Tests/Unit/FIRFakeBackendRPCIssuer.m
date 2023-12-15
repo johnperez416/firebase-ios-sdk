@@ -15,6 +15,14 @@
  */
 
 #import "FirebaseAuth/Tests/Unit/FIRFakeBackendRPCIssuer.h"
+#import "FirebaseAuth/Sources/Backend/FIRAuthBackend.h"
+
+@interface FIRAuthBackend (Internal)
++ (NSMutableURLRequest *)requestWithURL:(NSURL *)URL
+                            contentType:(NSString *)contentType
+                   requestConfiguration:(FIRAuthRequestConfiguration *)requestConfiguration
+                      completionHandler:(void (^)(NSMutableURLRequest *_Nullable))completionHandler;
+@end
 
 /** @var kFakeErrorDomain
     @brief Fake error domain used for testing.
@@ -28,7 +36,7 @@ static NSString *const kFakeErrorDomain = @"fake domain";
   FIRAuthBackendRPCIssuerCompletionHandler _handler;
 }
 
-- (void)asyncPostToURLWithRequestConfiguration:(FIRAuthRequestConfiguration *)requestConfiguration
+- (void)asyncCallToURLWithRequestConfiguration:(FIRAuthRequestConfiguration *)requestConfiguration
                                            URL:(NSURL *)URL
                                           body:(NSData *)body
                                    contentType:(NSString *)contentType
@@ -36,6 +44,15 @@ static NSString *const kFakeErrorDomain = @"fake domain";
   _requestURL = [URL copy];
   if (body) {
     _requestData = body;
+    // Use the real implementation so that the complete request can
+    // be verified during testing.
+    [FIRAuthBackend requestWithURL:URL
+                       contentType:contentType
+              requestConfiguration:requestConfiguration
+                 completionHandler:^(NSMutableURLRequest *request) {
+                   self->_completeRequest = request;
+                 }];
+
     NSDictionary *JSON = [NSJSONSerialization JSONObjectWithData:body options:0 error:nil];
     _decodedRequest = JSON;
   }

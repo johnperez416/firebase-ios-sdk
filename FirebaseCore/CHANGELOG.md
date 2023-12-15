@@ -1,3 +1,140 @@
+# Firebase 10.14.0
+- For developers building for visionOS, Xcode 15 beta 6 or later is required.
+
+# Firebase 10.13.0
+- For developers building for visionOS, Xcode 15 beta 5 or later is required.
+
+# Firebase 10.12.0
+- For developers building for visionOS, using products that use the Keychain
+  (e.g. FirebaseAuth) may fail to access the keychain on the visionOS
+  simulator. To work around this, add the Keychain Sharing capability to the
+  visionOS target and explicitly add a keychain group (e.g. the bundle ID).
+- Firebase's Swift Package Manager distribution does not support
+  Xcode 15 Beta 1. Please use Xcode 15 Beta 2 or later.
+
+# Firebase 10.11.0
+- [changed] Improved error reporting for misnamed configuration plist files (#11317).
+
+# Firebase 10.10.0
+- [changed] Firebase now requires at least Xcode 14.1.
+
+# Firebase 10.8.1
+- [fixed] Swift Package Manager only release to fix a 10.8.0 Firestore issue
+  impacting macCatalyst. (#11119)
+
+# Firebase 10.8.0
+- Fix new build warnings introduced by Xcode 14.3. (#11059)
+- [changed] The Firebase Swift package now requires the Swift 5.6 toolchain (Xcode 13.3) to build.
+
+# Firebase 10.4.0
+- Deprecate `androidClientID` and `trackingID` from FirebaseOptions. (#10520)
+
+# Firebase 10.2.0
+- Update GTMSessionFetcher dependency specifications to enable support for the compatible
+  GTMSessionFetcher 3.x versions.
+
+# Firebase 10.1.0
+- [changed] Bitcode is no longer included in Firebase binary distributions. Xcode 14 does not
+  support bitcode. tvOS apps using a Firebase binary distribution will now need to use
+  Xcode 14. (#10372)
+
+# Firebase 10.0.0
+- [changed] **Breaking change**: Firebase's minimum supported versions have
+  updated for the following platforms:
+  - If using **CocoaPods**:
+    - | Platform  | Firebase 9 | Firebase 10 |
+      | ------------- | ------------- | ------------- |
+      | iOS  | 10.0  | **11.0**  |
+      | tvOS  | 10.0  | **12.0**  |
+      | macOS  | 10.12  | **10.13**  |
+      | watchOS  | 6.0  | 6.0  |
+  - If using **Swift Package Manager**:
+    - | Platform  | Firebase 9 | Firebase 10 |
+      | ------------- | ------------- | ------------- |
+      | iOS  | 11.0  | 11.0  |
+      | tvOS  | 12.0  | 12.0  |
+      | macOS  | 10.12  | **10.13**  |
+      | watchOS  | 7.0  | 7.0  |
+  - If using **Carthage** or the **Zip** distribution:
+    - | Platform  | Firebase 9 | Firebase 10 |
+      | ------------- | ------------- | ------------- |
+      | iOS  | 11.0  | 11.0  |
+      | tvOS  | 11.0  | **12.0**  |
+      | macOS  | 10.13  | 10.13  |
+      | watchOS  | N/A  | N/A  |
+- [changed] **Breaking change**: Update dependency specification for
+  GTMSessionFetcher to allow all versions that are >= 2.1 and < 3.0. (#10131)
+
+# Firebase 9.6.0
+- [fixed] Mac apps using Firebase products that store SDK data in the keychain
+  will no longer prompt the user for permission to access the keychain. This
+  requires that Mac apps using Firebase be signed with a provisioning profile
+  that has the Keychain Sharing capability enabled. (#9392)
+- [fixed] Fixed `Array.Index`-related compile time errors when building with older Swift versions. (#10171)
+- [fixed] Update dependency specification for GTMSessionFetcher to allow all 2.x versions. (#10131)
+
+# Firebase 9.5.0
+- [fixed] Zip Distribution Fixed Promises module name issue impacting lld builds. (#10071)
+- [fixed] Limit dependency GTMSessionFetcher version update to < 2.1.0 to avoid a new deprecation
+  warning. (#10123)
+
+# Firebase 9.4.1
+- [fixed] Swift Package Manager only release to fix a 9.4.0 tagging issue impacting some users. (#10083)
+
+# Firebase 9.4.0
+- [fixed] Fixed rare crash on launch due to out-of-bounds exception in FirebaseCore. (#10025)
+
+# Firebase 9.3.0
+- [changed] Discontinue bitcode inclusion in all binary distributions.
+- [fixed] Remove GoogleSignInSwiftSupport from Zip and Carthage distributions due to
+  infeasibility. The GoogleSignIn distribution continues. (#9937)
+
+# Firebase 9.2.0
+- [added] Zip and Carthage distributions now include GoogleSignInSwiftSupport. (#9900)
+
+# Firebase 9.0.0
+- [changed] Firebase now requires at least Xcode 13.3.1.
+- [deprecated] Usage of the Firebase pod, the Firebase module (`import Firebase`), and `Firebase.h`
+  is deprecated. Use the specific Firebase product instead like: `pod 'FirebaseMessaging'` and
+  `import FirebaseMessaging`.
+
+## CocoaPods Users
+- [changed] **Breaking change**: Podfiles must include `use_frameworks!` or
+  `use_frameworks! :linkage => :static`.
+- [changed] Objective-C only apps using `use_frameworks! :linkage => :static` may need to add a
+  dummy Swift file to their project to avoid linker issues.
+- [changed] C++/Objective-C++ clients should use `#import <FirebaseFunctions/FirebaseFunctions-Swift.h>`
+  and `#import <FirebaseStorage/FirebaseStorage-Swift.h>` to access Functions and Storage APIs,
+  respectively.
+- [changed] Beta Swift pods (except `FirebaseInAppMessagingSwift-Beta`) have exited beta and
+  are now generally available. The `-beta` version suffix is no longer required. These should
+  be removed from your Podfile, and any `import` statements should be changed accordingly.
+- [changed] The `FirebaseStorageSwift` and `FirebaseFunctionsSwift` have been merged into
+  `FirebaseStorage` and `FirebaseFunctions` respectively and should be removed from your Podfile.
+
+## Swift Package Manager Users
+- [changed] `import Firebase` will no longer implicitly
+  import Firebase Storage and Firebase Functions APIs. Use `import FirebaseStorage` and
+  `import FirebaseFunctions`, respectively. C++/Objective-C++ clients should find alternative
+  workarounds at https://forums.swift.org/t/importing-swift-libraries-from-objective-c/56730.
+- [changed] Beta Swift libraries (except `FirebaseInAppMessagingSwift-Beta`) have exited beta
+  and are now generally available. When upgrading a project that includes one or more of these
+  libraries, an error like `Missing package product 'FirebaseSwift-Beta'` will appear. In your
+  project's settings, go to "General" and scroll down to `Frameworks, Libraries, and Embedded
+  Content`. Select the missing package, and remove it. Then, click the `+` button to add the
+  assocciated library without the `-Beta` suffix. Any `import` statements in your project
+  should be changed accordingly.
+- [changed] The `FirebaseStorageSwift-Beta` and `FirebaseFunctionsSwift-Beta` libraries have been
+  merged into `FirebaseStorage` and `FirebaseFunctions` respectively and should be removed from your
+  project following the instructions above.
+
+## Zip and Carthage Users
+- [changed] **Breaking change**: Update the minimum supported versions for the zip and Carthage
+  distributions to iOS 11.0, tvOS 11.0 and macOS 10.13. (#9633)
+- [added] The zip and Carthage distributions now include the Swift extension frameworks. (#7819)
+- [changed] Zip file installation instructions have changed. Please see the README embedded in
+  the zip file for updated instructions.
+
 # Firebase 8.10.0
 - [fixed] Fixed platform availability checks in Swift Package Manager that may prevent code
   completion for Analytics APIs on macOS and tvOS. (#9032)

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import SwiftUI
 import FirebaseInAppMessaging
 import FirebaseInAppMessagingSwift
+import SwiftUI
 
 struct ModalInAppMessageView: View {
   var modalMessage: InAppMessagingModalDisplay
@@ -23,7 +23,7 @@ struct ModalInAppMessageView: View {
   var body: some View {
     VStack {
       if let imageData = modalMessage.imageData?.imageRawData,
-        let image = UIImage(data: imageData) {
+         let image = UIImage(data: imageData) {
         Image(uiImage: image)
       }
       Text(modalMessage.title).padding(4)

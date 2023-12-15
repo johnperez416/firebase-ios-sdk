@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'FirebaseCombineSwift'
-  s.version          = '8.0.0'
+  s.version          = '10.0.0'
   s.summary          = 'Swift extensions with Combine support for Firebase'
 
   s.description      = <<-DESC
@@ -9,7 +9,7 @@ for internal testing only. It should not be published.
                        DESC
 
   s.homepage         = 'https://firebase.google.com'
-  s.license          = { :type => 'Apache', :file => 'LICENSE' }
+  s.license          = { :type => 'Apache-2.0', :file => 'LICENSE' }
   s.authors          = 'Google, Inc.'
 
   s.source           = {
@@ -19,7 +19,7 @@ for internal testing only. It should not be published.
 
   s.social_media_url = 'https://twitter.com/Firebase'
 
-  s.swift_version         = '5.0'
+  s.swift_version         = '5.3'
 
   ios_deployment_target = '13.0'
   osx_deployment_target = '10.15'
@@ -51,12 +51,11 @@ for internal testing only. It should not be published.
   s.osx.framework = 'AppKit'
   s.tvos.framework = 'UIKit'
 
-  s.dependency 'FirebaseCore', '~> 8.0'
-  s.dependency 'FirebaseAuth', '~> 8.0'
-  s.dependency 'FirebaseFunctions', '~> 8.0'
-  s.dependency 'FirebaseFirestore', '~> 8.0'
-  s.dependency 'FirebaseStorage', '~> 8.0'
-  s.dependency 'FirebaseStorageSwift', '~> 8.0-beta'
+  s.dependency 'FirebaseCore', '~> 10.0'
+  s.dependency 'FirebaseAuth', '~> 10.0'
+  s.dependency 'FirebaseFunctions', '~> 10.0'
+  s.dependency 'FirebaseFirestore', '~> 10.0'
+  s.dependency 'FirebaseStorage', '~> 10.0'
 
   s.pod_target_xcconfig = {
     'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}"',
@@ -82,7 +81,6 @@ for internal testing only. It should not be published.
     }
     unit_tests.dependency 'OCMock'
     unit_tests.dependency 'FirebaseAuthTestingSupport'
-    unit_tests.dependency 'FirebaseFunctionsTestingSupport'
     unit_tests.dependency 'FirebaseFirestoreTestingSupport'
   end
 
@@ -95,13 +93,13 @@ for internal testing only. It should not be published.
     }
     int_tests.source_files = [
       'FirebaseCombineSwift/Tests/Integration/Storage/StorageIntegration.swift',
-      'FirebaseStorage/Tests/SwiftIntegration/Credentials.swift'
+      'FirebaseStorage/Tests/Integration/Credentials.swift'
     ]
     int_tests.requires_app_host = true
     # Resources are shared with FirebaseStorage's integration tests.
     int_tests.resources = 'FirebaseStorage/Tests/Integration/Resources/1mb.dat',
                           'FirebaseStorage/Tests/Integration/Resources/GoogleService-Info.plist',
                           'FirebaseStorage/Tests/Integration/Resources/HomeImprovement.numbers'
-    int_tests.dependency 'FirebaseAuth', '~> 8.0'
+    int_tests.dependency 'FirebaseAuth', '~> 10.0'
   end
 end

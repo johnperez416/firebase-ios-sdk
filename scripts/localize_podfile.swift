@@ -20,7 +20,7 @@
 
 import Foundation
 
-let arg_cnts: Int = Int(CommandLine.argc)
+let arg_cnts: Int = .init(CommandLine.argc)
 
 let podfile = CommandLine.arguments[1]
 
@@ -35,8 +35,18 @@ if arg_cnts > 2 {
 let implicitPods = [
   "FirebaseCore", "FirebaseInstallations", "Firebase",
   "FirebaseAuth", "FirebaseABTesting",
-  "FirebaseCoreDiagnostics", "FirebaseRemoteConfig",
+  "FirebaseRemoteConfig", "FirebaseCoreExtension",
+  "FirebaseAppCheckInterop", "FirebaseAuthInterop",
+  "FirebaseMessagingInterop", "FirebaseCoreInternal",
+  "FirebaseSessions", "FirebaseSharedSwift",
 ]
+
+let binaryPods = [
+  "GoogleAppMeasurement",
+  "GoogleAppMeasurementOnDeviceConversion",
+  "FirebaseAnalytics",
+]
+
 var didImplicits = false
 
 var fileContents = ""
@@ -71,7 +81,7 @@ for line in lines {
       podName = podName.replacingOccurrences(of: "Firebase/", with: "Firebase")
     }
     let podspec = repo.appendingPathComponent(podName + ".podspec").path
-    if FileManager().fileExists(atPath: podspec) {
+    if !binaryPods.contains(podName), FileManager().fileExists(atPath: podspec) {
       if didImplicits == false {
         didImplicits = true
         for implicit in implicitPods {

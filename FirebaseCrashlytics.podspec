@@ -1,20 +1,22 @@
 Pod::Spec.new do |s|
   s.name             = 'FirebaseCrashlytics'
-  s.version          = '8.10.0'
+  s.version          = '10.20.0'
   s.summary          = 'Best and lightest-weight crash reporting for mobile, desktop and tvOS.'
   s.description      = 'Firebase Crashlytics helps you track, prioritize, and fix stability issues that erode app quality.'
   s.homepage         = 'https://firebase.google.com/'
-  s.license          = { :type => 'Apache', :file => 'Crashlytics/LICENSE' }
+  s.license          = { :type => 'Apache-2.0', :file => 'Crashlytics/LICENSE' }
   s.authors          = 'Google, Inc.'
   s.source           = {
     :git => 'https://github.com/firebase/firebase-ios-sdk.git',
     :tag => 'CocoaPods-' + s.version.to_s
   }
 
-  ios_deployment_target = '9.0'
-  osx_deployment_target = '10.12'
-  tvos_deployment_target = '10.0'
+  ios_deployment_target = '11.0'
+  osx_deployment_target = '10.13'
+  tvos_deployment_target = '12.0'
   watchos_deployment_target = '6.0'
+
+  s.swift_version = '5.3'
 
   s.ios.deployment_target = ios_deployment_target
   s.osx.deployment_target = osx_deployment_target
@@ -29,7 +31,7 @@ Pod::Spec.new do |s|
     'Crashlytics/Protogen/**/*.{c,h,m,mm}',
     'Crashlytics/Shared/**/*.{c,h,m,mm}',
     'Crashlytics/third_party/**/*.{c,h,m,mm}',
-    'FirebaseCore/Sources/Private/*.h',
+    'FirebaseCore/Extension/*.h',
     'FirebaseInstallations/Source/Library/Private/*.h',
     'Interop/Analytics/Public/*.h',
   ]
@@ -42,6 +44,7 @@ Pod::Spec.new do |s|
     'Crashlytics/README.md',
     'run',
     'upload-symbols',
+    'CrashlyticsInputFiles.xcfilelist',
   ]
 
   # Ensure the run script and upload-symbols are callable via
@@ -49,14 +52,16 @@ Pod::Spec.new do |s|
   s.prepare_command = <<-PREPARE_COMMAND_END
     cp -f ./Crashlytics/run ./run
     cp -f ./Crashlytics/upload-symbols ./upload-symbols
+    cp -f ./Crashlytics/CrashlyticsInputFiles.xcfilelist ./CrashlyticsInputFiles.xcfilelist
   PREPARE_COMMAND_END
 
-  s.dependency 'FirebaseCore', '~> 8.0'
-  s.dependency 'FirebaseInstallations', '~> 8.0'
-  s.dependency 'PromisesObjC', '>= 1.2', '< 3.0'
-  s.dependency 'GoogleDataTransport', '~> 9.1'
-  s.dependency 'GoogleUtilities/Environment', '~> 7.6'
-  s.dependency 'nanopb', '~> 2.30908.0'
+  s.dependency 'FirebaseCore', '~> 10.5'
+  s.dependency 'FirebaseInstallations', '~> 10.0'
+  s.dependency 'FirebaseSessions', '~> 10.5'
+  s.dependency 'PromisesObjC', '~> 2.1'
+  s.dependency 'GoogleDataTransport', '~> 9.2'
+  s.dependency 'GoogleUtilities/Environment', '~> 7.8'
+  s.dependency 'nanopb', '>= 2.30908.0', '< 2.30910.0'
 
   s.libraries = 'c++', 'z'
   s.ios.frameworks = 'Security', 'SystemConfiguration'
@@ -106,13 +111,14 @@ Pod::Spec.new do |s|
     # Unit tests can't run on watchOS.
     unit_tests.platforms = {
       :ios => ios_deployment_target,
-      :osx => osx_deployment_target,
+      :osx => '10.15',
       :tvos => tvos_deployment_target
     }
     unit_tests.source_files = 'Crashlytics/UnitTests/*.[mh]',
                               'Crashlytics/UnitTests/*/*.[mh]'
     unit_tests.resources = 'Crashlytics/UnitTests/Data/*',
                            'Crashlytics/UnitTests/*.clsrecord',
-                           'Crashlytics/UnitTests/FIRCLSMachO/data/*'
+                           'Crashlytics/UnitTests/FIRCLSMachO/machO_data/*'
+    unit_tests.requires_app_host = true
   end
 end

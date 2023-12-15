@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Foundation
 import FirebaseCore
 import FirebaseInstallations
+import Foundation
 
 /// URL Session to use while retrieving model info.
 protocol ModelInfoRetrieverSession {
@@ -371,7 +371,8 @@ class ModelInfoRetriever {
                                                                  .statusCode))
               completion(.failure(.invalidArgument))
             case 401, 403:
-              // Error could be due to FirebaseML API not enabled for project, or invalid permissions.
+              // Error could be due to FirebaseML API not enabled for project, or invalid
+              // permissions.
               let errorMessage = self.getErrorFromResponse(data)
               let description = errorMessage ?? ModelInfoRetriever.ErrorDescription.permissionDenied
               DeviceLogger.logEvent(level: .debug,
@@ -511,10 +512,10 @@ extension ModelInfoRetriever {
   /// Parse error message from server response.
   private func getErrorFromResponse(_ data: Data?) -> String? {
     if let data = data,
-      let responseJSON = try? JSONSerialization
-      .jsonObject(with: data, options: []) as? [String: Any],
-      let error = responseJSON["error"] as? [String: Any],
-      let errorMessage = error["message"] as? String {
+       let responseJSON = try? JSONSerialization
+       .jsonObject(with: data, options: []) as? [String: Any],
+       let error = responseJSON["error"] as? [String: Any],
+       let errorMessage = error["message"] as? String {
       return errorMessage
     }
     return nil

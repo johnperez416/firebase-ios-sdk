@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+include("${CMAKE_CURRENT_LIST_DIR}/firebase_utils.cmake")
+
 function(download_external_sources)
   file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/external)
 
@@ -27,7 +29,17 @@ function(download_external_sources)
     set(EXTERNAL_PROJECT_HTTP_HEADER "")
   endif()
 
-  execute_process(
+  # Pass along FIREBASE_PYTHON_HOST_EXECUTABLE because leveldb.cmake uses it.
+  if("${FIREBASE_PYTHON_HOST_EXECUTABLE}" STREQUAL "")
+    set(FIREBASE_PYTHON_HOST_EXECUTABLE_CMAKE_ARG "")
+  else()
+    set(
+      FIREBASE_PYTHON_HOST_EXECUTABLE_CMAKE_ARG
+      "-DFIREBASE_PYTHON_HOST_EXECUTABLE:FILEPATH=${FIREBASE_PYTHON_HOST_EXECUTABLE}"
+    )
+  endif()
+
+  firebase_execute_process(
     COMMAND
       ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}"
       -DFIREBASE_DOWNLOAD_DIR=${FIREBASE_DOWNLOAD_DIR}
@@ -36,6 +48,7 @@ function(download_external_sources)
       -DDOWNLOAD_BENCHMARK=${DOWNLOAD_BENCHMARK}
       -DDOWNLOAD_GOOGLETEST=${DOWNLOAD_GOOGLETEST}
       -DEXTERNAL_PROJECT_HTTP_HEADER=${EXTERNAL_PROJECT_HTTP_HEADER}
+      ${FIREBASE_PYTHON_HOST_EXECUTABLE_CMAKE_ARG}
       ${PROJECT_SOURCE_DIR}/cmake/external
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/external
   )
@@ -45,7 +58,7 @@ function(download_external_sources)
     set(cmake_build_args -j)
   endif()
 
-  execute_process(
+  firebase_execute_process(
     COMMAND ${CMAKE_COMMAND} --build . -- ${cmake_build_args}
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/external
   )

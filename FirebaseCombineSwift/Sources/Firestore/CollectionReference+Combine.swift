@@ -25,17 +25,17 @@
 
   @available(swift 5.0)
   @available(iOS 13.0, macOS 10.15, macCatalyst 13.0, tvOS 13.0, watchOS 6.0, *)
-  extension CollectionReference {
+  public extension CollectionReference {
     // MARK: - Adding Documents
 
     /// Adds a new document to this collection with the specified data, assigning it a document ID
     /// automatically.
     ///
     /// - Parameter data: A `Dictionary` containing the data for the new document.
-    /// - Returns: A publisher emitting a `DocumentReference` value once the document has been successfully
-    ///   written to the server. This publisher will not emit while the client is offline, though
-    ///   local changes will be visible immediately.
-    public func addDocument(data: [String: Any])
+    /// - Returns: A publisher emitting a `DocumentReference` value once the document has been
+    ///            successfully written to the server. This publisher will not emit while the
+    ///            client is offline, though local changes will be visible immediately.
+    func addDocument(data: [String: Any])
       -> Future<DocumentReference, Error> {
       var reference: DocumentReference?
       return Future { promise in
@@ -57,12 +57,12 @@
       /// - Parameters:
       ///   - value: An instance of `Encodable` to be encoded to a document.
       ///   - encoder: An encoder instance to use to run the encoding.
-      /// - Returns: A publisher emitting a `DocumentReference` value once the document has been successfully
-      /// written to the server. This publisher will not emit while the client is offline, though
-      /// local changes will be visible immediately.
-      public func addDocument<T: Encodable>(from value: T,
-                                            encoder: Firestore.Encoder = Firestore
-                                              .Encoder()) -> Future<
+      /// - Returns: A publisher emitting a `DocumentReference` value once the document has been
+      ///            successfully written to the server. This publisher will not emit while the
+      ///            client is offline, though local changes will be visible immediately.
+      func addDocument<T: Encodable>(from value: T,
+                                     encoder: Firestore.Encoder = Firestore
+                                       .Encoder()) -> Future<
         DocumentReference,
         Error
       > {

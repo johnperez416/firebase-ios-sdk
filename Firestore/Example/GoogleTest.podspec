@@ -17,7 +17,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'GoogleTest'
-  s.version          = '1.10.0'
+  s.version          = '99.99.99'
   s.summary          = 'Google Test'
 
   s.description      = <<-DESC
@@ -30,12 +30,12 @@ Google's C++ test framework.
 
   s.source           = {
     :git => 'https://github.com/google/googletest.git',
-    :tag => 'release-' + s.version.to_s
+    :commit => 'bf66935e07825318ae519675d73d0f3e313b3ec6'
   }
 
-  s.ios.deployment_target = '10.0'
-  s.osx.deployment_target = '10.12'
-  s.tvos.deployment_target = '10.0'
+  s.ios.deployment_target = '11.0'
+  s.osx.deployment_target = '10.13'
+  s.tvos.deployment_target = '12.0'
 
   s.requires_arc = false
 
@@ -92,7 +92,7 @@ Google's C++ test framework.
     # Remove includes of files in internal/custom
     sed -i.bak -e '/include.*internal\/custom/ d' \
       googlemock/include/gmock/gmock-matchers.h \
-      googlemock/include/gmock/gmock-generated-actions.h \
+      googlemock/include/gmock/gmock-more-actions.h \
       googlemock/include/gmock/internal/gmock-port.h \
       googletest/include/gtest/gtest-printers.h \
       googletest/include/gtest/internal/gtest-port.h \

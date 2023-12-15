@@ -20,17 +20,20 @@
 
 set -euo pipefail
 
+source scripts/buildcache.sh
 #
 function runXcodebuild() {
   parameters=(
     -workspace 'CocoapodsIntegrationTest.xcworkspace'
     -scheme 'CocoapodsIntegrationTest'
     -sdk 'iphonesimulator'
-    -destination 'platform=iOS Simulator,name=iPhone 11'
+    -destination 'platform=iOS Simulator,name=iPhone 14'
     CODE_SIGNING_REQUIRED=NO
     clean
     build
   )
+
+  parameters=("${buildcache_xcb_flags[@]}" "${parameters[@]}")
 
   echo xcodebuild "${parameters[@]}"
   xcodebuild "${parameters[@]}" | xcpretty; result=$?

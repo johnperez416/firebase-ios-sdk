@@ -16,7 +16,7 @@
 
 #import <Foundation/Foundation.h>
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 
 #import "FirebaseDatabase/Sources/Api/Private/FIRDataSnapshot_Private.h"
 #import "FirebaseDatabase/Sources/Api/Private/FIRDatabaseQuery_Private.h"
@@ -465,7 +465,7 @@ typedef NSDictionary * (^fbt_nsdictionary_void)(void);
 - (NSArray *)loadSpecs {
   static NSArray *json;
 #if SWIFT_PACKAGE
-  NSBundle *bundle = Firebase_DatabaseUnit_SWIFTPM_MODULE_BUNDLE();
+  NSBundle *bundle = SWIFTPM_MODULE_BUNDLE;
 #else
   NSBundle *bundle = [NSBundle bundleForClass:[FSyncPointTests class]];
 #endif

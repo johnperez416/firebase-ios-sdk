@@ -100,15 +100,15 @@ struct ZipBuilderTool: ParsableCommand {
   // MARK: - Platform Arguments
 
   /// The minimum iOS Version to build for.
-  @Option(default: "10.0", help: ArgumentHelp("The minimum supported iOS version."))
+  @Option(default: "11.0", help: ArgumentHelp("The minimum supported iOS version."))
   var minimumIOSVersion: String
 
   /// The minimum macOS Version to build for.
-  @Option(default: "10.12", help: ArgumentHelp("The minimum supported macOS version."))
+  @Option(default: "10.13", help: ArgumentHelp("The minimum supported macOS version."))
   var minimumMacOSVersion: String
 
   /// The minimum tvOS Version to build for.
-  @Option(default: "10.0", help: ArgumentHelp("The minimum supported tvOS version."))
+  @Option(default: "12.0", help: ArgumentHelp("The minimum supported tvOS version."))
   var minimumTVOSVersion: String
 
   /// The list of platforms to build for.
@@ -174,7 +174,7 @@ struct ZipBuilderTool: ParsableCommand {
     }
 
     if let localPodspecPath = localPodspecPath,
-      !FileManager.default.directoryExists(at: localPodspecPath) {
+       !FileManager.default.directoryExists(at: localPodspecPath) {
       throw ValidationError("""
       `local-podspec-path` pass in does not exist. Value: \(localPodspecPath)
       """)
@@ -194,7 +194,7 @@ struct ZipBuilderTool: ParsableCommand {
   func run() throws {
     // Keep timing for how long it takes to build the zip file for information purposes.
     let buildStart = Date()
-    var cocoaPodsUpdateMessage: String = ""
+    var cocoaPodsUpdateMessage = ""
 
     // Do a `pod update` if requested.
     if updatePodRepo {
@@ -227,6 +227,14 @@ struct ZipBuilderTool: ParsableCommand {
     // Update iOS target platforms if `--include-catalyst` was specified.
     if !includeCatalyst {
       SkipCatalyst.set()
+    }
+
+    // 32 bit iOS slices should only be built if the minimum iOS version is less than 11.
+    guard let minVersion = Float(minimumIOSVersion) else {
+      fatalError("Invalid minimum iOS version: \(minimumIOSVersion)")
+    }
+    if minVersion < 11.0 {
+      Included32BitIOS.set()
     }
 
     let paths = ZipBuilder.FilesystemPaths(repoDir: repoDir,

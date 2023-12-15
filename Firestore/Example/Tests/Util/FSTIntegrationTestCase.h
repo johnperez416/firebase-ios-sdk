@@ -24,6 +24,8 @@
 #import "FIRFirestoreSource.h"
 
 @class FIRApp;
+@class FIRAggregateQuery;
+@class FIRAggregateQuerySnapshot;
 @class FIRCollectionReference;
 @class FIRDocumentSnapshot;
 @class FIRDocumentReference;
@@ -31,6 +33,7 @@
 @class FIRFirestore;
 @class FIRFirestoreSettings;
 @class FIRQuery;
+@class FIRWriteBatch;
 @class FSTEventAccumulator;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -43,6 +46,9 @@ extern "C" {
 
 /** Returns the default Firestore project ID for testing. */
 + (NSString *)projectID;
+
+/** Returns the default Firestore database ID for testing. */
++ (NSString *)databaseID;
 
 + (bool)isRunningAgainstEmulator;
 
@@ -96,6 +102,8 @@ extern "C" {
 - (FIRDocumentSnapshot *)readSnapshotForRef:(FIRDocumentReference *)query
                               requireOnline:(BOOL)online;
 
+- (FIRAggregateQuerySnapshot *)readSnapshotForAggregate:(FIRAggregateQuery *)query;
+
 - (void)writeDocumentRef:(FIRDocumentReference *)ref data:(NSDictionary<NSString *, id> *)data;
 
 - (void)updateDocumentRef:(FIRDocumentReference *)ref data:(NSDictionary<NSString *, id> *)data;
@@ -111,9 +119,13 @@ extern "C" {
                     data:(NSDictionary<NSString *, id> *)data
                   fields:(NSArray<id> *)fields;
 
+- (void)commitWriteBatch:(FIRWriteBatch *)batch;
+
 - (void)disableNetwork;
 
 - (void)enableNetwork;
+
+- (void)checkOnlineAndOfflineQuery:(FIRQuery *)query matchesResult:(NSArray *)expectedDocs;
 
 /**
  * "Blocks" the current thread/run loop until the block returns YES.
@@ -137,6 +149,9 @@ NSArray<NSString *> *FIRQuerySnapshotGetIDs(FIRQuerySnapshot *docs);
 /** Converts the FIRQuerySnapshot to an NSArray containing an NSArray containing the doc change data
  * in order of { type, doc title, doc data }. */
 NSArray<NSArray<id> *> *FIRQuerySnapshotGetDocChangesData(FIRQuerySnapshot *docs);
+
+/** Gets the FIRDocumentReference objects from a FIRQuerySnapshot and returns them. */
+NSArray<FIRDocumentReference *> *FIRDocumentReferenceArrayFromQuerySnapshot(FIRQuerySnapshot *);
 
 #if __cplusplus
 }  // extern "C"

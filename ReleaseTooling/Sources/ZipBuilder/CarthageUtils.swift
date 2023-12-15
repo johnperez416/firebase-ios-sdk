@@ -72,9 +72,9 @@ extension CarthageUtils {
   ///   - packagedDir: The packaged directory assembled for the Carthage distribution.
   ///   - templateDir: The template project directory, contains the dummy Firebase library.
   ///   - jsonDir: Location of directory containing all JSON Carthage manifests.
-  ///   - firebaseVersion: The version of the Firebase pod.
-  ///   - coreDiagnosticsPath: The path to the Core Diagnostics framework built for Carthage.
+  ///   - artifacts: Build artifacts.
   ///   - outputDir: The directory where all artifacts should be created.
+  ///   - versionCheckEnabled: Checking if Carthage version already exists.
 
   private static func generateCarthageRelease(fromPackagedDir packagedDir: URL,
                                               templateDir: URL,
@@ -170,7 +170,7 @@ extension CarthageUtils {
       let sortedManifest = jsonManifest.sorted { $0.0 < $1.0 }
 
       // Generate the JSON format and combine all the lines afterwards.
-      let manifestLines = sortedManifest.map { (version, url) -> String in
+      let manifestLines = sortedManifest.map { version, url -> String in
         // Two spaces at the beginning of the String are intentional.
         "  \"\(version)\": \"\(url.absoluteString)\""
       }
@@ -304,7 +304,8 @@ extension CarthageUtils {
   }
 
   /// Get the JSON filename for a product
-  /// Consider using just the product name post Firebase 7. The conditions are to handle Firebase 6 compatibility.
+  /// Consider using just the product name post Firebase 7. The conditions are to handle Firebase 6
+  /// compatibility.
   ///
   /// - Parameters:
   ///   - product: The name of the Firebase product.

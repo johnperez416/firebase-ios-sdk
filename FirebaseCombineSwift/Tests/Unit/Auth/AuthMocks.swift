@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Foundation
 @testable import FirebaseAuth
+import Foundation
 
 let expectationTimeout: TimeInterval = 2
 
@@ -94,8 +94,18 @@ extension AuthBackendImplementationMock {
     fatalError("You need to implement \(#function) in your mock.")
   }
 
+  func revokeToken(_ request: FIRRevokeTokenRequest,
+                   callback: @escaping FIRRevokeTokenResponseCallback) {
+    fatalError("You need to implement \(#function) in your mock.")
+  }
+
   func signIn(withGameCenter request: FIRSignInWithGameCenterRequest,
               callback: @escaping FIRSignInWithGameCenterResponseCallback) {
+    fatalError("You need to implement \(#function) in your mock.")
+  }
+
+  func getRecaptchaConfig(_ request: FIRGetRecaptchaConfigRequest,
+                          callback: @escaping FIRGetRecaptchaConfigResponseCallback) {
     fatalError("You need to implement \(#function) in your mock.")
   }
 
@@ -104,7 +114,7 @@ extension AuthBackendImplementationMock {
     fatalError("You need to implement \(#function) in your mock.")
   }
 
-  func post(with request: FIRAuthRPCRequest, response: FIRAuthRPCResponse,
+  func call(with request: FIRAuthRPCRequest, response: FIRAuthRPCResponse,
             callback: @escaping (Error?) -> Void) {
     fatalError("You need to implement \(#function) in your mock.")
   }

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Foundation
+import Combine
 import FirebaseCombineSwift
 import FirebaseFirestoreTestingSupport
-import Combine
+import Foundation
 import XCTest
 
 class GetDocumentsTests: XCTestCase {
@@ -27,7 +27,7 @@ class GetDocumentsTests: XCTestCase {
     var verifySource: ((_ source: FirestoreSource) -> Void)?
 
     override func getDocuments(source: FirestoreSource,
-                               completion: @escaping FIRQuerySnapshotBlock) {
+                               completion: @escaping (QuerySnapshot?, Error?) -> Void) {
       do {
         verifySource?(source)
         let snapshot = try mockGetDocuments()

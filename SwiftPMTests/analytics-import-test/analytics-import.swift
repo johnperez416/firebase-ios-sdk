@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import XCTest
 import FirebaseAnalytics
+import XCTest
 #if canImport(SwiftUI)
-  import SwiftUI
   import FirebaseAnalyticsSwift
+  import SwiftUI
 #endif
 
 class importTest: XCTestCase {
   func testAnalyticsImported() {
-    Analytics.logEvent(AnalyticsEventEcommercePurchase,
+    Analytics.logEvent(AnalyticsEventPurchase,
                        parameters: [AnalyticsParameterShipping: 10.0])
   }
 

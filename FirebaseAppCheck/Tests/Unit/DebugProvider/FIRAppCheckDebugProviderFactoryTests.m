@@ -19,7 +19,7 @@
 #import "FirebaseAppCheck/Sources/Public/FirebaseAppCheck/FIRAppCheckDebugProvider.h"
 #import "FirebaseAppCheck/Sources/Public/FirebaseAppCheck/FIRAppCheckDebugProviderFactory.h"
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 
 @interface FIRAppCheckDebugProviderFactoryTests : XCTestCase
 @end
@@ -31,6 +31,8 @@
   options.APIKey = @"api_key";
   options.projectID = @"project_id";
   FIRApp *app = [[FIRApp alloc] initInstanceWithName:@"testInitWithValidApp" options:options];
+  // The following disables automatic token refresh, which could interfere with tests.
+  app.dataCollectionDefaultEnabled = NO;
 
   FIRAppCheckDebugProviderFactory *factory = [[FIRAppCheckDebugProviderFactory alloc] init];
 

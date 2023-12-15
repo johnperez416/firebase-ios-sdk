@@ -18,6 +18,7 @@
 #import <XCTest/XCTest.h>
 
 #import "Firestore/Source/API/FIRLoadBundleTask+Internal.h"
+#import "Firestore/Source/API/FIRLocalCacheSettings+Internal.h"
 
 #import "Firestore/Example/Tests/Util/FSTEventAccumulator.h"
 #import "Firestore/Example/Tests/Util/FSTHelpers.h"
@@ -27,8 +28,8 @@
 #include "Firestore/core/test/unit/testutil/bundle_builder.h"
 
 using firebase::firestore::testutil::CreateBundle;
-using firebase::firestore::util::MakeString;
 using firebase::firestore::util::MakeNSString;
+using firebase::firestore::util::MakeString;
 
 @interface FIRBundlesTests : FSTIntegrationTestCase
 @end
@@ -68,11 +69,16 @@ using firebase::firestore::util::MakeNSString;
 }
 
 - (std::string)defaultBundle {
-  return CreateBundle(MakeString([FSTIntegrationTestCase projectID]));
+  return CreateBundle(MakeString([FSTIntegrationTestCase projectID]),
+                      MakeString([FSTIntegrationTestCase databaseID]));
 }
 
 - (std::string)bundleForProject:(NSString*)projectID {
-  return CreateBundle(MakeString(projectID));
+  return CreateBundle(MakeString(projectID), MakeString([FSTIntegrationTestCase databaseID]));
+}
+
+- (std::string)bundleForDatabase:(NSString*)databaseID {
+  return CreateBundle(MakeString([FSTIntegrationTestCase projectID]), MakeString(databaseID));
 }
 
 - (void)verifyQueryResults {
@@ -200,7 +206,7 @@ using firebase::firestore::util::MakeNSString;
 
 - (void)testLoadedDocumentsShouldNotBeGarbageCollectedRightAway {
   auto settings = [self.db settings];
-  [settings setPersistenceEnabled:FALSE];
+  [settings setCacheSettings:[[FIRMemoryCacheSettings alloc] init]];
   [self.db setSettings:settings];
 
   auto bundle = [self defaultBundle];
@@ -229,6 +235,29 @@ using firebase::firestore::util::MakeNSString;
   __block FIRLoadBundleTaskProgress* result;
   XCTestExpectation* expectation = [self expectationWithDescription:@"loading complete"];
   auto bundle = [self bundleForProject:@"OtherProject"];
+  FIRLoadBundleTask* task =
+      [self.db loadBundle:[MakeNSString(bundle) dataUsingEncoding:NSUTF8StringEncoding]
+               completion:^(FIRLoadBundleTaskProgress* progress, NSError* error) {
+                 result = progress;
+                 XCTAssertNotNil(error);
+                 [expectation fulfill];
+               }];
+  [task addObserver:^(FIRLoadBundleTaskProgress* progress) {
+    [progresses addObject:progress];
+  }];
+  [self awaitExpectation:expectation];
+
+  XCTAssertEqual(2ul, progresses.count);
+  [self verifyProgress:progresses[0] hasLoadedDocument:0];
+  [self verifyErrorProgress:progresses[1]];
+  XCTAssertEqualObjects(progresses[1], result);
+}
+
+- (void)testLoadBundlesFromOtherDatabaseFails {
+  NSMutableArray* progresses = [[NSMutableArray alloc] init];
+  __block FIRLoadBundleTaskProgress* result;
+  XCTestExpectation* expectation = [self expectationWithDescription:@"loading complete"];
+  auto bundle = [self bundleForDatabase:@"other-database"];
   FIRLoadBundleTask* task =
       [self.db loadBundle:[MakeNSString(bundle) dataUsingEncoding:NSUTF8StringEncoding]
                completion:^(FIRLoadBundleTaskProgress* progress, NSError* error) {

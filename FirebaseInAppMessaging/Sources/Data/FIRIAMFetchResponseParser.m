@@ -15,9 +15,9 @@
  */
 
 #import <TargetConditionals.h>
-#if TARGET_OS_IOS || TARGET_OS_TV
+#if TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)
 
-#import "FirebaseCore/Sources/Private/FirebaseCoreInternal.h"
+#import "FirebaseCore/Extension/FirebaseCoreInternal.h"
 
 #import "FirebaseInAppMessaging/Sources/FIRCore+InAppMessaging.h"
 #import "FirebaseInAppMessaging/Sources/Private/Data/FIRIAMFetchResponseParser.h"
@@ -356,6 +356,7 @@
     }
     if (isTestMessage) {
       return [[FIRIAMMessageDefinition alloc] initTestMessageWithRenderData:renderData
+                                                                    appData:dataBundle
                                                           experimentPayload:experimentPayload];
     } else {
       return [[FIRIAMMessageDefinition alloc] initWithRenderData:renderData
@@ -398,4 +399,4 @@
 
 @end
 
-#endif  // TARGET_OS_IOS || TARGET_OS_TV
+#endif  // TARGET_OS_IOS || TARGET_OS_TV || (defined(TARGET_OS_VISION) && TARGET_OS_VISION)
